@@ -1,3 +1,5 @@
+import { StreamHealthResult } from '../utils/streamChecker';
+
 export interface Channel {
   id: string;
   name: string;
@@ -25,7 +27,9 @@ export interface FilterOptions {
   searchQuery: string;
   selectedGroup: string;
   formatFilter: 'ALL' | 'HLS' | 'MP4' | 'TS' | 'OTHER';
+  statusFilter: 'ALL' | 'LIVE' | 'OFFLINE' | 'UNCHECKED';
   sortBy: 'order' | 'name-asc' | 'name-desc' | 'group-asc';
 }
 
 export type ViewMode = 'list' | 'grid';
+export type { StreamHealthResult };

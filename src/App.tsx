@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from './components/Header';
 import { UploadSection } from './components/UploadSection';
 import { StatsBar } from './components/StatsBar';
@@ -8,12 +8,12 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { ExportModal } from './components/ExportModal';
 import { parseM3U } from './utils/m3uParser';
 import { SAMPLE_PLAYLISTS } from './utils/samplePlaylists';
+import { checkStreamStatus, StreamHealthResult } from './utils/streamChecker';
 import { Channel, PlaylistData, FilterOptions, ViewMode } from './types/playlist';
-import { Check, Info, Shield, HelpCircle, Code, Layers } from 'lucide-react';
+import { Check, Layers } from 'lucide-react';
 
 export default function App() {
   const [playlist, setPlaylist] = useState<PlaylistData>(() => {
-    // Initial sample playlist so the app is immediately populated and usable
     return parseM3U(SAMPLE_PLAYLISTS[0].content, 'featured-streams.m3u');
   });
 
@@ -25,12 +25,115 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
+  // Stream health state tracking
+  const [streamHealthMap, setStreamHealthMap] = useState<Record<string, StreamHealthResult>>({});
+  const [checkingUrls, setCheckingUrls] = useState<Set<string>>(new Set());
+  const [isCheckingAll, setIsCheckingAll] = useState(false);
+  const [probeProgress, setProbeProgress] = useState<{ current: number; total: number } | null>(null);
+
   const [filters, setFilters] = useState<FilterOptions>({
     searchQuery: '',
     selectedGroup: 'ALL',
     formatFilter: 'ALL',
+    statusFilter: 'ALL',
     sortBy: 'order',
   });
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  };
+
+  // Function to perform lightweight HEAD/Range check on a single channel
+  const handleCheckChannel = useCallback(async (channel: Channel) => {
+    setCheckingUrls((prev) => new Set(prev).add(channel.url));
+    setStreamHealthMap((prev) => ({
+      ...prev,
+      [channel.url]: { status: 'checking' },
+    }));
+
+    try {
+      const result = await checkStreamStatus(channel.url);
+      setStreamHealthMap((prev) => ({
+        ...prev,
+        [channel.url]: result,
+      }));
+      if (result.status === 'live') {
+        showToast(`${channel.name}: Live (${result.latencyMs}ms)`);
+      } else {
+        showToast(`${channel.name}: Offline (${result.statusText || 'Error'})`);
+      }
+    } catch {
+      setStreamHealthMap((prev) => ({
+        ...prev,
+        [channel.url]: { status: 'offline', statusText: 'Connection failed' },
+      }));
+    } finally {
+      setCheckingUrls((prev) => {
+        const next = new Set(prev);
+        next.delete(channel.url);
+        return next;
+      });
+    }
+  }, []);
+
+  // Function to perform lightweight batch probing across all streams
+  const handleCheckAllStreams = useCallback(async () => {
+    if (playlist.channels.length === 0 || isCheckingAll) return;
+    setIsCheckingAll(true);
+    const channels = playlist.channels;
+    setProbeProgress({ current: 0, total: channels.length });
+
+    // Mark all as checking
+    setStreamHealthMap((prev) => {
+      const next = { ...prev };
+      channels.forEach((c) => {
+        next[c.url] = { status: 'checking' };
+      });
+      return next;
+    });
+
+    const CHUNK_SIZE = 4;
+    let completed = 0;
+
+    for (let i = 0; i < channels.length; i += CHUNK_SIZE) {
+      const chunk = channels.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async (c) => {
+          try {
+            const res = await checkStreamStatus(c.url);
+            setStreamHealthMap((prev) => ({
+              ...prev,
+              [c.url]: res,
+            }));
+          } catch {
+            setStreamHealthMap((prev) => ({
+              ...prev,
+              [c.url]: { status: 'offline', statusText: 'Error' },
+            }));
+          } finally {
+            completed++;
+            setProbeProgress({ current: completed, total: channels.length });
+          }
+        })
+      );
+    }
+
+    setIsCheckingAll(false);
+    setProbeProgress(null);
+    showToast(`Health probe finished for ${channels.length} streams.`);
+  }, [playlist.channels, isCheckingAll]);
+
+  // Initial probe of sample streams on first mount
+  useEffect(() => {
+    // Automatically probe the initial sample streams so user sees Live/Offline badges immediately
+    const timer = setTimeout(() => {
+      handleCheckAllStreams();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Check URL hash for shared playlist data on mount
   useEffect(() => {
@@ -47,7 +150,8 @@ export default function App() {
             const groupAttr = c.g ? ` group-title="${c.g}"` : '';
             reconstructedM3U += `#EXTINF:-1${logoAttr}${groupAttr},${c.n}\n${c.u}\n`;
           });
-          setPlaylist(parseM3U(reconstructedM3U, 'shared-playlist.m3u'));
+          const parsed = parseM3U(reconstructedM3U, 'shared-playlist.m3u');
+          setPlaylist(parsed);
           showToast('Loaded shared playlist from URL link!');
         }
       }
@@ -55,13 +159,6 @@ export default function App() {
       // Ignore hash parse error
     }
   }, []);
-
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 2800);
-  };
 
   const handleParseContent = (content: string, filename = 'playlist.m3u') => {
     setIsLoading(true);
@@ -71,11 +168,12 @@ export default function App() {
         showToast('No valid stream URLs detected in provided content.');
       } else {
         setPlaylist(parsed);
-        // Reset filters
+        setStreamHealthMap({});
         setFilters({
           searchQuery: '',
           selectedGroup: 'ALL',
           formatFilter: 'ALL',
+          statusFilter: 'ALL',
           sortBy: 'order',
         });
         showToast(`Parsed ${parsed.channels.length} channels successfully!`);
@@ -94,6 +192,7 @@ export default function App() {
       channelsWithLogo: 0,
       parsedAt: new Date().toISOString(),
     });
+    setStreamHealthMap({});
     showToast('Cleared playlist');
   };
 
@@ -147,6 +246,17 @@ export default function App() {
       }
     }
 
+    // Status filter (Live vs Offline vs Unchecked)
+    if (filters.statusFilter !== 'ALL') {
+      result = result.filter((c) => {
+        const health = streamHealthMap[c.url];
+        if (filters.statusFilter === 'LIVE') return health?.status === 'live';
+        if (filters.statusFilter === 'OFFLINE') return health?.status === 'offline';
+        if (filters.statusFilter === 'UNCHECKED') return !health || health.status === 'unchecked';
+        return true;
+      });
+    }
+
     // Sorting
     if (filters.sortBy === 'name-asc') {
       result.sort((a, b) => a.name.localeCompare(b.name));
@@ -157,7 +267,7 @@ export default function App() {
     }
 
     return result;
-  }, [playlist.channels, filters]);
+  }, [playlist.channels, filters, streamHealthMap]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -194,6 +304,12 @@ export default function App() {
               onCopyAllUrls={handleCopyAllUrls}
               isCopiedAll={isCopiedAll}
               onOpenExport={() => setIsExportModalOpen(true)}
+              streamHealthMap={streamHealthMap}
+              onCheckAllStreams={handleCheckAllStreams}
+              isCheckingAll={isCheckingAll}
+              probeProgress={probeProgress}
+              statusFilter={filters.statusFilter}
+              onStatusFilterChange={(st) => setFilters({ ...filters, statusFilter: st })}
             />
 
             {/* Filter & Search Toolbar */}
@@ -214,6 +330,9 @@ export default function App() {
               onPlayChannel={(channel) => setActiveChannelForPlayer(channel)}
               onCopyUrl={handleCopySingleUrl}
               copiedId={copiedId}
+              streamHealthMap={streamHealthMap}
+              onCheckChannel={handleCheckChannel}
+              checkingUrls={checkingUrls}
             />
           </section>
         )}
@@ -225,15 +344,15 @@ export default function App() {
               Supported Playlist Attributes & Specifications
             </h2>
             <p className="text-xs text-slate-400">
-              Standardized M3U parsing engine compliant with IPTV, HLS RFC 8216, and Kodi/VLC metadata formats.
+              Standardized M3U parsing engine with lightweight HEAD/Range stream probing and metadata inspection.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
-              <h3 className="text-xs font-semibold text-cyan-400 mb-1">HLS Live & VOD (.m3u8)</h3>
+              <h3 className="text-xs font-semibold text-cyan-400 mb-1">Live / Offline Health Probing</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Extracts adaptive bitrate HTTP Live Streaming manifests, media playlists, and variant sub-streams with resolution identifiers.
+                Sends lightweight HEAD and byte-range metadata queries to detect active video streams, HTTP status codes, server response latency, and MIME types without downloading full media files.
               </p>
             </div>
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
@@ -256,16 +375,16 @@ export default function App() {
           <h2 className="text-lg font-semibold text-white mb-1">Frequently Asked Questions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-400">
             <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-1.5">
-              <h4 className="text-xs font-semibold text-slate-200">Why do some IPTV streams not play directly in web browsers?</h4>
+              <h4 className="text-xs font-semibold text-slate-200">How does the stream health check work?</h4>
               <p className="leading-relaxed">
-                Browsers enforce Cross-Origin Resource Sharing (CORS) rules. Some stream servers don't return <code className="font-mono text-[11px] text-cyan-300">Access-Control-Allow-Origin: *</code>. You can copy the extracted URL directly and open it inside VLC Player, PotPlayer, or IINA.
+                It executes a non-intrusive HEAD request to check whether the stream server responds with an active HTTP 200/206 status, calculating latency and confirming video headers without consuming excess bandwidth.
               </p>
             </div>
 
             <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-1.5">
-              <h4 className="text-xs font-semibold text-slate-200">How do I export only a specific category or search result?</h4>
+              <h4 className="text-xs font-semibold text-slate-200">Can I filter by Live streams only?</h4>
               <p className="leading-relaxed">
-                Use the search and category filters to select the desired group, then click <strong>Export Channels</strong> and select <strong>Scope: Filtered</strong>.
+                Yes! Click the <strong>Live</strong> button in the Status filter or click the <strong>Live: N</strong> counter in the statistics bar to view only verified online channels.
               </p>
             </div>
           </div>

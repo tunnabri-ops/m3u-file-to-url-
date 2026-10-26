@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Play, Copy, Check, ExternalLink, Tv, Radio } from 'lucide-react';
-import { Channel, ViewMode } from '../types/playlist';
+import { Play, Copy, Check, Tv } from 'lucide-react';
+import { Channel, ViewMode, StreamHealthResult } from '../types/playlist';
+import { StatusBadge } from './StatusBadge';
 
 interface ChannelListProps {
   channels: Channel[];
@@ -8,6 +9,9 @@ interface ChannelListProps {
   onPlayChannel: (channel: Channel) => void;
   onCopyUrl: (url: string, id: string) => void;
   copiedId: string | null;
+  streamHealthMap: Record<string, StreamHealthResult>;
+  onCheckChannel: (channel: Channel) => void;
+  checkingUrls: Set<string>;
 }
 
 export const ChannelList: React.FC<ChannelListProps> = ({
@@ -16,6 +20,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   onPlayChannel,
   onCopyUrl,
   copiedId,
+  streamHealthMap,
+  onCheckChannel,
+  checkingUrls,
 }) => {
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
 
@@ -29,7 +36,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         <Tv className="w-10 h-10 mx-auto text-slate-600 mb-3" />
         <h4 className="text-sm font-semibold text-slate-300 mb-1">No channels found</h4>
         <p className="text-xs text-slate-500">
-          Try adjusting your search query, format filters, or category selection.
+          Try adjusting your search query, status filters, format filters, or category selection.
         </p>
       </div>
     );
@@ -47,6 +54,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                   <th className="py-3 px-4 w-12 text-center">#</th>
                   <th className="py-3 px-4">Channel</th>
                   <th className="py-3 px-4 hidden sm:table-cell">Category</th>
+                  <th className="py-3 px-4 text-center">Health Status</th>
                   <th className="py-3 px-4">Stream URL</th>
                   <th className="py-3 px-4 text-center w-20">Format</th>
                   <th className="py-3 px-4 text-right w-28">Actions</th>
@@ -56,6 +64,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                 {channels.map((channel, idx) => {
                   const hasLogo = channel.logo && !failedLogos[channel.id];
                   const isCopied = copiedId === channel.id;
+                  const health = streamHealthMap[channel.url];
+                  const isChecking = checkingUrls.has(channel.url);
 
                   return (
                     <tr
@@ -105,8 +115,17 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                         </span>
                       </td>
 
+                      {/* Live / Offline Health Status Badge */}
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <StatusBadge
+                          health={health}
+                          isChecking={isChecking}
+                          onCheck={() => onCheckChannel(channel)}
+                        />
+                      </td>
+
                       {/* Stream URL */}
-                      <td className="py-3 px-4 max-w-[240px] lg:max-w-xs">
+                      <td className="py-3 px-4 max-w-[200px] lg:max-w-xs">
                         <span
                           title={channel.url}
                           className="font-mono text-[11px] text-slate-400 block truncate hover:text-cyan-300 transition-colors select-all"
@@ -165,6 +184,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           {channels.map((channel, idx) => {
             const hasLogo = channel.logo && !failedLogos[channel.id];
             const isCopied = copiedId === channel.id;
+            const health = streamHealthMap[channel.url];
+            const isChecking = checkingUrls.has(channel.url);
 
             return (
               <div
@@ -172,7 +193,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                 className="glass-card rounded-2xl p-4 flex flex-col justify-between group hover:border-cyan-500/40 relative overflow-hidden"
               >
                 <div>
-                  {/* Top card row: logo + index + format */}
+                  {/* Top card row: logo + status badge + format */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
                       {hasLogo ? (
@@ -190,17 +211,25 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                       )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="font-mono text-[10px] text-cyan-400">
-                        {channel.format}
-                      </span>
-                      <span className="font-mono text-[10px] text-slate-600 tabular-nums">
-                        #{idx + 1}
-                      </span>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] text-cyan-400">
+                          {channel.format}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-600 tabular-nums">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                      <StatusBadge
+                        health={health}
+                        isChecking={isChecking}
+                        onCheck={() => onCheckChannel(channel)}
+                        compact
+                      />
                     </div>
                   </div>
 
-                  {/* Channel Title & Category (No pills: clean unboxed typography) */}
+                  {/* Channel Title & Category */}
                   <h4 className="text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors truncate mb-1">
                     {channel.name}
                   </h4>

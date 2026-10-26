@@ -4,12 +4,12 @@ export function generateSingleFileHtml(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>M3U File to URL Converter</title>
+  <title>M3U File to URL Converter & Health Prober</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     h1, h2, h3, h4, .font-display { font-family: 'Outfit', sans-serif; }
@@ -28,16 +28,18 @@ export function generateSingleFileHtml(): string {
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200">
-  <!-- Header -->
   <header class="border-b border-slate-800/80 bg-slate-950/80 sticky top-0 z-40 backdrop-blur-xl">
     <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-8">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 font-bold">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 font-bold text-white">
           ⚡
         </div>
         <span class="font-display text-lg font-semibold tracking-tight text-white">M3U Stream Nexus</span>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <button id="checkAllTopBtn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-colors">
+          Check All Statuses
+        </button>
         <button id="copyAllTopBtn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
           Copy All URLs
         </button>
@@ -48,15 +50,13 @@ export function generateSingleFileHtml(): string {
     </div>
   </header>
 
-  <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
-    <!-- Hero Title -->
     <div class="text-center max-w-3xl mx-auto">
       <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-3">
-        Convert <span class="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">M3U Playlists</span> to Direct URLs
+        Convert & Verify <span class="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">M3U Playlists</span>
       </h1>
       <p class="text-xs sm:text-sm text-slate-400">
-        Drag and drop your .m3u or .m3u8 files, extract clean stream links and logos instantly, and preview live streams.
+        Drop your .m3u files, run lightweight HEAD/Range requests for Live/Offline badges, and extract clean stream endpoints.
       </p>
     </div>
 
@@ -78,25 +78,32 @@ export function generateSingleFileHtml(): string {
       </div>
     </div>
 
-    <!-- Stats & Filters Bar (Hidden until channels loaded) -->
+    <!-- Controls & Stats Bar -->
     <div id="controlsSection" class="space-y-4 hidden">
       <div class="glass-panel rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
-        <div class="flex items-center gap-4 text-slate-400">
-          <div><strong id="statTotal" class="text-white font-mono text-sm tabular-nums">0</strong> channels found</div>
+        <div class="flex flex-wrap items-center gap-3 text-slate-400">
+          <div><strong id="statTotal" class="text-white font-mono text-sm tabular-nums">0</strong> channels</div>
           <div>·</div>
           <div><strong id="statCategories" class="text-white font-mono tabular-nums">0</strong> categories</div>
           <div>·</div>
-          <div><strong id="statLogos" class="text-white font-mono tabular-nums">0</strong> with logos</div>
+          <div class="text-emerald-400 font-mono"><strong id="statLive" class="tabular-nums font-semibold">0</strong> Live</div>
+          <div>·</div>
+          <div class="text-rose-400 font-mono"><strong id="statOffline" class="tabular-nums font-semibold">0</strong> Offline</div>
         </div>
         <div class="flex items-center gap-2">
-          <input type="text" id="searchInput" placeholder="Search channels..." class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500" />
+          <input type="text" id="searchInput" placeholder="Search channels or URLs..." class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500" />
           <select id="groupSelect" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none">
             <option value="ALL">All Categories</option>
+          </select>
+          <select id="statusFilterSelect" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none">
+            <option value="ALL">All Statuses</option>
+            <option value="LIVE">Live Only</option>
+            <option value="OFFLINE">Offline Only</option>
           </select>
         </div>
       </div>
 
-      <!-- Channel Table Container -->
+      <!-- Channel Table -->
       <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs">
@@ -105,12 +112,12 @@ export function generateSingleFileHtml(): string {
                 <th class="py-3 px-4 w-12 text-center">#</th>
                 <th class="py-3 px-4">Channel</th>
                 <th class="py-3 px-4">Category</th>
+                <th class="py-3 px-4 text-center">Health Status</th>
                 <th class="py-3 px-4">Stream URL</th>
                 <th class="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody id="channelTableBody" class="divide-y divide-slate-800/60 text-slate-300">
-            </tbody>
+            <tbody id="channelTableBody" class="divide-y divide-slate-800/60 text-slate-300"></tbody>
           </table>
         </div>
       </div>
@@ -134,13 +141,13 @@ export function generateSingleFileHtml(): string {
     </div>
   </div>
 
-  <!-- Toast Notification -->
   <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 border border-cyan-500/50 text-cyan-300 px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium transition-all duration-300 opacity-0 pointer-events-none translate-y-2">
     Copied to clipboard!
   </div>
 
   <script>
     let channels = [];
+    let healthMap = {};
     let currentHls = null;
 
     function showToast(msg) {
@@ -150,6 +157,63 @@ export function generateSingleFileHtml(): string {
       setTimeout(() => {
         toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-2');
       }, 2500);
+    }
+
+    async function checkStreamStatus(url) {
+      const start = Date.now();
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      try {
+        let res;
+        try {
+          res = await fetch(url, { method: 'HEAD', signal: ctrl.signal });
+        } catch {
+          res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-1024' }, signal: ctrl.signal });
+        }
+        clearTimeout(timer);
+        const latency = Date.now() - start;
+        return {
+          status: res.status >= 200 && res.status < 400 ? 'live' : 'offline',
+          statusCode: res.status,
+          latencyMs: latency,
+          contentType: res.headers.get('content-type') || 'stream'
+        };
+      } catch (e) {
+        clearTimeout(timer);
+        return {
+          status: 'offline',
+          statusCode: 0,
+          latencyMs: Date.now() - start,
+          error: e.name === 'AbortError' ? 'Timeout' : 'Unreachable'
+        };
+      }
+    }
+
+    async function probeChannel(url) {
+      healthMap[url] = { status: 'checking' };
+      renderChannels();
+      const res = await checkStreamStatus(url);
+      healthMap[url] = res;
+      updateStats();
+      renderChannels();
+    }
+
+    async function probeAllChannels() {
+      showToast('Starting lightweight health probe on streams...');
+      for (let i = 0; i < channels.length; i++) {
+        healthMap[channels[i].url] = { status: 'checking' };
+      }
+      renderChannels();
+
+      for (let i = 0; i < channels.length; i += 3) {
+        const batch = channels.slice(i, i + 3);
+        await Promise.all(batch.map(async (c) => {
+          healthMap[c.url] = await checkStreamStatus(c.url);
+        }));
+        updateStats();
+        renderChannels();
+      }
+      showToast('Completed stream health check!');
     }
 
     function parseM3U(text) {
@@ -189,16 +253,31 @@ export function generateSingleFileHtml(): string {
     function renderChannels() {
       const q = document.getElementById('searchInput').value.toLowerCase();
       const groupFilter = document.getElementById('groupSelect').value;
+      const statusFilter = document.getElementById('statusFilterSelect').value;
       const tbody = document.getElementById('channelTableBody');
       tbody.innerHTML = '';
 
       const filtered = channels.filter(ch => {
         const matchesQuery = ch.name.toLowerCase().includes(q) || ch.url.toLowerCase().includes(q);
         const matchesGroup = groupFilter === 'ALL' || ch.group === groupFilter;
-        return matchesQuery && matchesGroup;
+        const h = healthMap[ch.url];
+        let matchesStatus = true;
+        if (statusFilter === 'LIVE') matchesStatus = h?.status === 'live';
+        if (statusFilter === 'OFFLINE') matchesStatus = h?.status === 'offline';
+        return matchesQuery && matchesGroup && matchesStatus;
       });
 
       filtered.forEach((ch, idx) => {
+        const h = healthMap[ch.url];
+        let badgeHtml = '<button onclick="probeChannel(\\'' + ch.url + '\\')" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-800 text-slate-400 hover:text-cyan-300">Check</button>';
+        if (h?.status === 'checking') {
+          badgeHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 font-mono">Checking...</span>';
+        } else if (h?.status === 'live') {
+          badgeHtml = '<button onclick="probeChannel(\\'' + ch.url + '\\')" class="px-2 py-0.5 rounded text-[10px] bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 font-mono flex items-center gap-1 mx-auto"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live ' + (h.latencyMs ? h.latencyMs + 'ms' : '') + '</button>';
+        } else if (h?.status === 'offline') {
+          badgeHtml = '<button onclick="probeChannel(\\'' + ch.url + '\\')" class="px-2 py-0.5 rounded text-[10px] bg-rose-950/40 border border-rose-500/40 text-rose-300 font-mono flex items-center gap-1 mx-auto"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline</button>';
+        }
+
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-800/40 transition-colors';
         tr.innerHTML = \`
@@ -206,10 +285,11 @@ export function generateSingleFileHtml(): string {
           <td class="py-3 px-4">
             <div class="flex items-center gap-2.5">
               \${ch.logo ? \`<img src="\${ch.logo}" class="w-6 h-6 object-contain rounded bg-slate-900" onerror="this.style.display='none'" />\` : ''}
-              <span class="font-medium text-white truncate max-w-[200px]">\${ch.name}</span>
+              <span class="font-medium text-white truncate max-w-[180px]">\${ch.name}</span>
             </div>
           </td>
           <td class="py-3 px-4 text-slate-400">\${ch.group}</td>
+          <td class="py-3 px-4 text-center">\${badgeHtml}</td>
           <td class="py-3 px-4 font-mono text-slate-400 max-w-xs truncate">\${ch.url}</td>
           <td class="py-3 px-4 text-right">
             <div class="flex items-center justify-end gap-1.5">
@@ -226,7 +306,15 @@ export function generateSingleFileHtml(): string {
       document.getElementById('statTotal').textContent = channels.length;
       const groups = Array.from(new Set(channels.map(c => c.group)));
       document.getElementById('statCategories').textContent = groups.length;
-      document.getElementById('statLogos').textContent = channels.filter(c => c.logo).length;
+
+      let liveCount = 0;
+      let offlineCount = 0;
+      channels.forEach(c => {
+        if (healthMap[c.url]?.status === 'live') liveCount++;
+        if (healthMap[c.url]?.status === 'offline') offlineCount++;
+      });
+      document.getElementById('statLive').textContent = liveCount;
+      document.getElementById('statOffline').textContent = offlineCount;
 
       const groupSelect = document.getElementById('groupSelect');
       groupSelect.innerHTML = '<option value="ALL">All Categories</option>';
@@ -240,13 +328,15 @@ export function generateSingleFileHtml(): string {
 
     function loadContent(text) {
       channels = parseM3U(text);
+      healthMap = {};
       if (channels.length > 0) {
         document.getElementById('controlsSection').classList.remove('hidden');
         updateStats();
         renderChannels();
-        showToast('Successfully parsed ' + channels.length + ' channels!');
+        showToast('Parsed ' + channels.length + ' channels! Probing health...');
+        probeAllChannels();
       } else {
-        alert('No valid stream URLs found in file.');
+        alert('No valid stream URLs found.');
       }
     }
 
@@ -254,6 +344,8 @@ export function generateSingleFileHtml(): string {
       navigator.clipboard.writeText(text);
       showToast('Copied to clipboard!');
     };
+
+    window.probeChannel = probeChannel;
 
     window.playChannel = function(encoded) {
       const ch = JSON.parse(decodeURIComponent(encoded));
@@ -321,8 +413,10 @@ https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream
       loadContent(sample);
     };
 
+    document.getElementById('checkAllTopBtn').onclick = probeAllChannels;
     document.getElementById('searchInput').oninput = renderChannels;
     document.getElementById('groupSelect').onchange = renderChannels;
+    document.getElementById('statusFilterSelect').onchange = renderChannels;
 
     document.getElementById('copyAllTopBtn').onclick = () => {
       if (channels.length === 0) return alert('No channels loaded.');
