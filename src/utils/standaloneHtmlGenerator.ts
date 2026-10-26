@@ -4,12 +4,12 @@ export function generateSingleFileHtml(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>M3U File to URL Converter & Health Prober</title>
+  <title>M3U FILE - High Performance IPTV & M3U Parser</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
     h1, h2, h3, h4, .font-display { font-family: 'Outfit', sans-serif; }
@@ -29,19 +29,19 @@ export function generateSingleFileHtml(): string {
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-cyan-500/30 selection:text-cyan-200">
   <header class="border-b border-slate-800/80 bg-slate-950/80 sticky top-0 z-40 backdrop-blur-xl">
-    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-8">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 font-bold text-white">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-sky-400 to-violet-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 font-bold text-white text-lg">
           ⚡
         </div>
-        <span class="font-display text-lg font-semibold tracking-tight text-white">M3U Stream Nexus</span>
+        <span class="font-display text-xl font-extrabold tracking-tight text-white">M3U FILE</span>
       </div>
       <div class="flex items-center gap-2">
-        <button id="checkAllTopBtn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-colors">
-          Check All Statuses
+        <button id="checkAllTopBtn" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-colors">
+          Check Health
         </button>
-        <button id="copyAllTopBtn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
-          Copy All URLs
+        <button id="copyAllTopBtn" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
+          Copy URLs
         </button>
         <button id="downloadM3uBtn" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 text-white hover:from-cyan-400 hover:to-indigo-500 shadow-md shadow-cyan-500/20 transition-all">
           Download Playlist
@@ -50,13 +50,13 @@ export function generateSingleFileHtml(): string {
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+  <main class="max-w-7xl mx-auto px-4 py-8 space-y-6">
     <div class="text-center max-w-3xl mx-auto">
-      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-3">
-        Convert & Verify <span class="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">M3U Playlists</span>
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-2">
+        M3U FILE <span class="bg-gradient-to-r from-cyan-400 via-sky-300 to-violet-400 bg-clip-text text-transparent">Stream Converter</span>
       </h1>
       <p class="text-xs sm:text-sm text-slate-400">
-        Drop your .m3u files, run lightweight HEAD/Range requests for Live/Offline badges, and extract clean stream endpoints.
+        High-performance M3U/M3U8 parser with Live/Offline health checking and smooth pagination.
       </p>
     </div>
 
@@ -90,16 +90,21 @@ export function generateSingleFileHtml(): string {
           <div>·</div>
           <div class="text-rose-400 font-mono"><strong id="statOffline" class="tabular-nums font-semibold">0</strong> Offline</div>
         </div>
-        <div class="flex items-center gap-2">
-          <input type="text" id="searchInput" placeholder="Search channels or URLs..." class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500" />
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="text" id="searchInput" placeholder="Search channels..." class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500" />
           <select id="groupSelect" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none">
             <option value="ALL">All Categories</option>
           </select>
-          <select id="statusFilterSelect" class="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none">
-            <option value="ALL">All Statuses</option>
-            <option value="LIVE">Live Only</option>
-            <option value="OFFLINE">Offline Only</option>
-          </select>
+        </div>
+      </div>
+
+      <!-- Pagination bar -->
+      <div class="glass-panel rounded-xl p-3 flex items-center justify-between text-xs font-mono">
+        <div id="pageInfo" class="text-slate-400">Showing 1-25</div>
+        <div class="flex items-center gap-1.5">
+          <button id="prevPageBtn" class="px-3 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-40">Prev</button>
+          <span id="pageNumberDisplay" class="px-2 text-cyan-400">1</span>
+          <button id="nextPageBtn" class="px-3 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-40">Next</button>
         </div>
       </div>
 
@@ -149,6 +154,8 @@ export function generateSingleFileHtml(): string {
     let channels = [];
     let healthMap = {};
     let currentHls = null;
+    let curPage = 1;
+    const pageSize = 50;
 
     function showToast(msg) {
       const toast = document.getElementById('toast');
@@ -171,12 +178,10 @@ export function generateSingleFileHtml(): string {
           res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-1024' }, signal: ctrl.signal });
         }
         clearTimeout(timer);
-        const latency = Date.now() - start;
         return {
           status: res.status >= 200 && res.status < 400 ? 'live' : 'offline',
           statusCode: res.status,
-          latencyMs: latency,
-          contentType: res.headers.get('content-type') || 'stream'
+          latencyMs: Date.now() - start,
         };
       } catch (e) {
         clearTimeout(timer);
@@ -184,7 +189,6 @@ export function generateSingleFileHtml(): string {
           status: 'offline',
           statusCode: 0,
           latencyMs: Date.now() - start,
-          error: e.name === 'AbortError' ? 'Timeout' : 'Unreachable'
         };
       }
     }
@@ -199,14 +203,14 @@ export function generateSingleFileHtml(): string {
     }
 
     async function probeAllChannels() {
-      showToast('Starting lightweight health probe on streams...');
+      showToast('Starting health probe...');
       for (let i = 0; i < channels.length; i++) {
         healthMap[channels[i].url] = { status: 'checking' };
       }
       renderChannels();
 
-      for (let i = 0; i < channels.length; i += 3) {
-        const batch = channels.slice(i, i + 3);
+      for (let i = 0; i < channels.length; i += 4) {
+        const batch = channels.slice(i, i + 4);
         await Promise.all(batch.map(async (c) => {
           healthMap[c.url] = await checkStreamStatus(c.url);
         }));
@@ -250,24 +254,33 @@ export function generateSingleFileHtml(): string {
       return list;
     }
 
-    function renderChannels() {
+    function getFilteredChannels() {
       const q = document.getElementById('searchInput').value.toLowerCase();
       const groupFilter = document.getElementById('groupSelect').value;
-      const statusFilter = document.getElementById('statusFilterSelect').value;
+      return channels.filter(ch => {
+        const matchesQuery = ch.name.toLowerCase().includes(q) || ch.url.toLowerCase().includes(q);
+        const matchesGroup = groupFilter === 'ALL' || ch.group === groupFilter;
+        return matchesQuery && matchesGroup;
+      });
+    }
+
+    function renderChannels() {
+      const filtered = getFilteredChannels();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (curPage > totalPages) curPage = totalPages;
+
+      const start = (curPage - 1) * pageSize;
+      const paginated = filtered.slice(start, start + pageSize);
+
+      document.getElementById('pageInfo').textContent = \`Showing \${filtered.length === 0 ? 0 : start + 1}-\${Math.min(filtered.length, start + pageSize)} of \${filtered.length}\`;
+      document.getElementById('pageNumberDisplay').textContent = \`\${curPage} / \${totalPages}\`;
+      document.getElementById('prevPageBtn').disabled = curPage <= 1;
+      document.getElementById('nextPageBtn').disabled = curPage >= totalPages;
+
       const tbody = document.getElementById('channelTableBody');
       tbody.innerHTML = '';
 
-      const filtered = channels.filter(ch => {
-        const matchesQuery = ch.name.toLowerCase().includes(q) || ch.url.toLowerCase().includes(q);
-        const matchesGroup = groupFilter === 'ALL' || ch.group === groupFilter;
-        const h = healthMap[ch.url];
-        let matchesStatus = true;
-        if (statusFilter === 'LIVE') matchesStatus = h?.status === 'live';
-        if (statusFilter === 'OFFLINE') matchesStatus = h?.status === 'offline';
-        return matchesQuery && matchesGroup && matchesStatus;
-      });
-
-      filtered.forEach((ch, idx) => {
+      paginated.forEach((ch, idx) => {
         const h = healthMap[ch.url];
         let badgeHtml = '<button onclick="probeChannel(\\'' + ch.url + '\\')" class="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-800 text-slate-400 hover:text-cyan-300">Check</button>';
         if (h?.status === 'checking') {
@@ -281,7 +294,7 @@ export function generateSingleFileHtml(): string {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-800/40 transition-colors';
         tr.innerHTML = \`
-          <td class="py-3 px-4 text-center font-mono text-slate-500">\${idx + 1}</td>
+          <td class="py-3 px-4 text-center font-mono text-slate-500">\${start + idx + 1}</td>
           <td class="py-3 px-4">
             <div class="flex items-center gap-2.5">
               \${ch.logo ? \`<img src="\${ch.logo}" class="w-6 h-6 object-contain rounded bg-slate-900" onerror="this.style.display='none'" />\` : ''}
@@ -329,11 +342,12 @@ export function generateSingleFileHtml(): string {
     function loadContent(text) {
       channels = parseM3U(text);
       healthMap = {};
+      curPage = 1;
       if (channels.length > 0) {
         document.getElementById('controlsSection').classList.remove('hidden');
         updateStats();
         renderChannels();
-        showToast('Parsed ' + channels.length + ' channels! Probing health...');
+        showToast('Parsed ' + channels.length + ' channels smoothly!');
         probeAllChannels();
       } else {
         alert('No valid stream URLs found.');
@@ -377,6 +391,22 @@ export function generateSingleFileHtml(): string {
       document.getElementById('videoElement').pause();
     };
 
+    document.getElementById('prevPageBtn').onclick = () => {
+      if (curPage > 1) {
+        curPage--;
+        renderChannels();
+      }
+    };
+
+    document.getElementById('nextPageBtn').onclick = () => {
+      const filtered = getFilteredChannels();
+      const totalPages = Math.ceil(filtered.length / pageSize);
+      if (curPage < totalPages) {
+        curPage++;
+        renderChannels();
+      }
+    };
+
     document.getElementById('fileInput').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -414,9 +444,8 @@ https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream
     };
 
     document.getElementById('checkAllTopBtn').onclick = probeAllChannels;
-    document.getElementById('searchInput').oninput = renderChannels;
-    document.getElementById('groupSelect').onchange = renderChannels;
-    document.getElementById('statusFilterSelect').onchange = renderChannels;
+    document.getElementById('searchInput').oninput = () => { curPage = 1; renderChannels(); };
+    document.getElementById('groupSelect').onchange = () => { curPage = 1; renderChannels(); };
 
     document.getElementById('copyAllTopBtn').onclick = () => {
       if (channels.length === 0) return alert('No channels loaded.');

@@ -1,10 +1,13 @@
 import React, { useState, useRef, DragEvent } from 'react';
-import { Upload, FileText, Link2, Sparkles, Check, AlertCircle, ArrowRight, Play, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Link2, Sparkles, AlertCircle, ArrowRight, Play, RefreshCw, Cpu, Zap } from 'lucide-react';
 import { SAMPLE_PLAYLISTS, SamplePreset } from '../utils/samplePlaylists';
+import { ParseProgress } from '../utils/workerParser';
 
 interface UploadSectionProps {
   onParseContent: (content: string, filename?: string) => void;
   isLoading: boolean;
+  parseProgress: ParseProgress | null;
+  parseMetrics: { parseTimeMs: number; channelCount: number } | null;
   activeFilename?: string;
   channelCount: number;
   onReset: () => void;
@@ -13,6 +16,8 @@ interface UploadSectionProps {
 export const UploadSection: React.FC<UploadSectionProps> = ({
   onParseContent,
   isLoading,
+  parseProgress,
+  parseMetrics,
   activeFilename,
   channelCount,
   onReset,
@@ -101,13 +106,17 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
 
   return (
     <div id="converter" className="w-full">
-      {/* Hero Headline & Intro */}
-      <div className="text-center max-w-3xl mx-auto mb-8">
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white mb-3 text-balance">
-          Convert & Extract <span className="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">M3U Playlists</span> into Clean URLs
+      {/* Hero Headline & Intro with M3U FILE branding */}
+      <div className="text-center max-w-3xl mx-auto mb-8 px-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/50 border border-cyan-500/30 text-cyan-300 text-xs font-mono font-medium mb-3">
+          <Zap className="w-3.5 h-3.5 text-cyan-400" />
+          <span>M3U FILE · High-Speed Worker Engine</span>
+        </div>
+        <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-3 text-balance">
+          M3U FILE <span className="bg-gradient-to-r from-cyan-400 via-sky-300 to-violet-400 bg-clip-text text-transparent">Stream Converter</span> & Manager
         </h1>
-        <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          Instantly parse channel titles, stream endpoints, TVG logos, and categories. Test streams in real-time and export to clean M3U8, TXT, JSON, or CSV formats.
+        <p className="text-xs sm:text-sm text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          Ultra-responsive on Mobile & PC. Engineered with non-blocking Web Workers and virtual pagination to parse and manage massive playlists without UI lag.
         </p>
       </div>
 
@@ -115,10 +124,10 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
       <div className="glass-panel-glow rounded-2xl p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         {/* Method Switcher Tabs */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-1.5 p-1 bg-slate-900/90 border border-slate-800/80 rounded-xl">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-900/90 border border-slate-800/80 rounded-xl">
             <button
               onClick={() => setActiveTab('upload')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer min-h-[36px] ${
                 activeTab === 'upload'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -130,7 +139,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
 
             <button
               onClick={() => setActiveTab('paste')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer min-h-[36px] ${
                 activeTab === 'paste'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -142,7 +151,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
 
             <button
               onClick={() => setActiveTab('url')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer min-h-[36px] ${
                 activeTab === 'url'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -154,14 +163,14 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
 
             <button
               onClick={() => setActiveTab('samples')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap cursor-pointer min-h-[36px] ${
                 activeTab === 'samples'
-                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                  ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Sample Playlists</span>
+              <span>Samples</span>
             </button>
           </div>
 
@@ -180,6 +189,47 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
             </div>
           )}
         </div>
+
+        {/* Real-time Web Worker Parsing Progress Indicator */}
+        {isLoading && (
+          <div className="mb-6 p-4 rounded-xl bg-slate-900/90 border border-cyan-500/40 space-y-2">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <div className="flex items-center gap-2 text-cyan-300">
+                <Cpu className="w-4 h-4 text-cyan-400 animate-spin" />
+                <span>Web Worker processing playlist...</span>
+              </div>
+              <span className="text-white font-bold tabular-nums">
+                {parseProgress ? `${parseProgress.percent}%` : 'Parsing...'}
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden border border-slate-800">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500 transition-all duration-150"
+                style={{ width: `${parseProgress ? parseProgress.percent : 45}%` }}
+              />
+            </div>
+
+            {parseProgress && (
+              <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                <span>{parseProgress.linesProcessed.toLocaleString()} lines analyzed</span>
+                <span>{parseProgress.channelCount.toLocaleString()} channels extracted</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Worker Performance Badge */}
+        {!isLoading && parseMetrics && parseMetrics.channelCount > 0 && (
+          <div className="mb-4 px-3 py-1.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between text-[11px] font-mono text-emerald-300">
+            <span className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Parsed {parseMetrics.channelCount.toLocaleString()} channels via Web Worker</span>
+            </span>
+            <span className="text-emerald-400 font-semibold">{parseMetrics.parseTimeMs}ms (0ms UI lag)</span>
+          </div>
+        )}
 
         {/* Tab 1: Drag & Drop File Upload */}
         {activeTab === 'upload' && (
@@ -202,16 +252,16 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
                   : 'border-slate-700/80 hover:border-cyan-500/60 bg-slate-900/40 hover:bg-slate-900/70'
               }`}
             >
-              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-indigo-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-violet-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                 <Upload className="w-7 h-7" />
               </div>
               <h3 className="text-base font-semibold text-white mb-1">
                 Drop your M3U or M3U8 file here
               </h3>
               <p className="text-xs text-slate-400 mb-4">
-                Supports standard .m3u, .m3u8 playlists and plain text stream links
+                Supports small or massive files (50,000+ channels) parsed smoothly in background thread
               </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors">
+              <div className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-colors">
                 Browse Files
               </div>
             </div>
@@ -242,10 +292,10 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
               </button>
               <button
                 onClick={handlePasteSubmit}
-                disabled={!pasteText.trim()}
+                disabled={!pasteText.trim() || isLoading}
                 className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 rounded-lg transition-all shadow-md shadow-cyan-500/20 disabled:opacity-50 cursor-pointer"
               >
-                <span>Parse & Extract URLs</span>
+                <span>Parse in Worker</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -259,7 +309,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
               <label className="block text-xs font-medium text-slate-300 mb-2">
                 Enter Public M3U/M3U8 Web URL:
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="url"
                   value={remoteUrl}
@@ -270,7 +320,7 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
                 <button
                   onClick={handleUrlFetch}
                   disabled={!remoteUrl.trim() || isLoading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 rounded-lg transition-all shadow-md shadow-cyan-500/20 disabled:opacity-50 cursor-pointer shrink-0"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 rounded-lg transition-all shadow-md shadow-cyan-500/20 disabled:opacity-50 cursor-pointer shrink-0 min-h-[40px]"
                 >
                   <span>Fetch & Parse</span>
                 </button>

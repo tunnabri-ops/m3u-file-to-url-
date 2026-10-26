@@ -1,247 +1,294 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, FileCode, Database, Server, Code, Download, Layers } from 'lucide-react';
+import { X, Copy, Check, FileCode, HardDrive, Download, Layers, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface NextjsArchitectureModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const NEXTJS_FILES = [
+const NEXTJS_CLIENT_FILES = [
   {
-    id: 'schema-sql',
-    name: 'schema.sql (Supabase Schema)',
-    language: 'sql',
-    icon: Database,
-    description: 'PostgreSQL database table, indexes, and Row Level Security for Supabase',
-    content: `-- Supabase Database Schema for M3U Custom Slugs & IPTV Playlists
-CREATE TABLE IF NOT EXISTS public.playlists (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    slug TEXT UNIQUE NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT,
-    channels JSONB NOT NULL DEFAULT '[]'::jsonb,
-    is_public BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Index for instant custom slug lookups (O(1))
-CREATE INDEX IF NOT EXISTS idx_playlists_slug ON public.playlists (slug);
-
--- Enable Row Level Security (RLS)
-ALTER TABLE public.playlists ENABLE ROW LEVEL SECURITY;
-
--- Allow public read access to playlists
-CREATE POLICY "Public read playlists"
-    ON public.playlists
-    FOR SELECT
-    USING (is_public = true);
-
--- Allow public playlist creation (or restrict to auth.uid())
-CREATE POLICY "Public create/update playlists"
-    ON public.playlists
-    FOR ALL
-    USING (true)
-    WITH CHECK (true);
-`,
-  },
-  {
-    id: 'lib-supabase',
-    name: 'src/lib/supabase.ts',
-    language: 'typescript',
-    icon: Server,
-    description: 'Supabase client initialization and type definitions',
-    content: `import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export interface DbPlaylist {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  channels: any[];
-  is_public: boolean;
-  created_at: string;
-  updated_at: string;
-}
-`,
-  },
-  {
-    id: 'api-slug-route',
-    name: 'app/api/playlist/[slug]/route.ts',
+    id: 'next-config',
+    name: 'next.config.ts (Static Export)',
     language: 'typescript',
     icon: FileCode,
-    description: 'Next.js App Router dynamic endpoint: streams raw M3U8 or returns JSON',
-    content: `import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+    description: '100% Static HTML/JS Client Export: Deploy anywhere (Vercel, Cloudflare, Netlify, GitHub Pages)',
+    content: `import type { NextConfig } from 'next';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { slug: string } }
-) {
-  const { slug } = params;
-  const searchParams = request.nextUrl.searchParams;
-  const format = searchParams.get('format');
-  const accept = request.headers.get('accept') || '';
+const nextConfig: NextConfig = {
+  // Configured for 100% client-side static export
+  // Zero backend servers, zero databases, and zero API costs
+  output: 'export',
+  trailingSlash: true,
+  images: {
+    unoptimized: true,
+  },
+};
 
-  // Query Supabase by custom slug
-  const { data: playlist, error } = await supabase
-    .from('playlists')
-    .select('*')
-    .eq('slug', slug.toLowerCase())
-    .single();
-
-  if (error || !playlist) {
-    return NextResponse.json(
-      { error: \`Playlist with slug '\${slug}' not found\` },
-      { status: 404 }
-    );
-  }
-
-  // If client requested raw M3U (VLC, Kodi, TiviMate, OTT Navigator)
-  if (format === 'm3u' || format === 'm3u8' || accept.includes('mpegurl')) {
-    let m3uBody = '#EXTM3U\\n';
-    (playlist.channels || []).forEach((c: any) => {
-      const logoAttr = c.logo ? \` tvg-logo="\${c.logo}"\` : '';
-      const groupAttr = c.group ? \` group-title="\${c.group}"\` : '';
-      const idAttr = c.tvgId ? \` tvg-id="\${c.tvgId}"\` : '';
-      m3uBody += \`#EXTINF:-1\${idAttr}\${logoAttr}\${groupAttr},\${c.name}\\n\${c.url}\\n\`;
-    });
-
-    return new Response(m3uBody, {
-      status: 200,
-      headers: {
-        'Content-Type': 'audio/x-mpegurl; charset=utf-8',
-        'Content-Disposition': \`attachment; filename="\${slug}.m3u8"\`,
-        'Cache-Control': 'public, max-age=60, s-maxage=300',
-      },
-    });
-  }
-
-  // Return standard JSON response
-  return NextResponse.json({
-    slug: playlist.slug,
-    title: playlist.title,
-    description: playlist.description,
-    totalChannels: (playlist.channels || []).length,
-    channels: playlist.channels || [],
-    updatedAt: playlist.updated_at,
-  });
-}
+export default nextConfig;
 `,
   },
   {
-    id: 'api-playlists-route',
-    name: 'app/api/playlists/route.ts',
+    id: 'app-page',
+    name: 'app/page.tsx (Client Dashboard)',
     language: 'typescript',
     icon: FileCode,
-    description: 'Next.js App Router POST/GET endpoint for custom slug registration',
-    content: `import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { slug, title, description, channels } = body;
-
-    if (!slug || !channels || !Array.isArray(channels)) {
-      return NextResponse.json(
-        { error: 'Slug and channels array are required' },
-        { status: 400 }
-      );
-    }
-
-    const cleanSlug = slug
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9_-]/g, '-')
-      .replace(/-+/g, '-');
-
-    // Upsert playlist in Supabase
-    const { data, error } = await supabase
-      .from('playlists')
-      .upsert(
-        {
-          slug: cleanSlug,
-          title: title || cleanSlug,
-          description: description || '',
-          channels,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'slug' }
-      )
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const origin = request.nextUrl.origin;
-    return NextResponse.json({
-      success: true,
-      slug: cleanSlug,
-      shareUrl: \`\${origin}/playlist/\${cleanSlug}\`,
-      m3uStreamUrl: \`\${origin}/api/playlist/\${cleanSlug}?format=m3u\`,
-    });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-`,
-  },
-  {
-    id: 'app-slug-page',
-    name: 'app/playlist/[slug]/page.tsx',
-    language: 'typescript',
-    icon: Code,
-    description: 'Next.js App Router SSR/Client page for viewing & playing the custom playlist',
+    description: 'Client-side entry point with in-browser M3U conversion, custom naming, and live player',
     content: `'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
+import { HardDrive, Download, Search, Play, Trash2, Edit3, Share2 } from 'lucide-react';
+import { parseM3UClient, downloadCustomM3U } from '@/utils/m3uConverter';
+import { saveLocalPlaylist, getLocalPlaylists, generateShareableUrl } from '@/utils/localPlaylists';
 
-export default function PlaylistViewerPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
-  const [playlist, setPlaylist] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+export default function M3UConverterPage() {
+  const [channels, setChannels] = useState<any[]>([]);
+  const [customSlug, setCustomSlug] = useState('my-sports-list');
+  const [customTitle, setCustomTitle] = useState('My Custom Sports Playlist');
+  const [search, setSearch] = useState('');
+  const [savedLists, setSavedLists] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!slug) return;
-    fetch(\`/api/playlist/\${slug}\`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPlaylist(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [slug]);
+    setSavedLists(getLocalPlaylists());
+  }, []);
 
-  if (loading) return <div className="p-12 text-center text-slate-400">Loading custom playlist /{slug}...</div>;
-  if (!playlist || playlist.error) return <div className="p-12 text-center text-rose-400">Playlist /{slug} not found.</div>;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const parsed = parseM3UClient(text);
+    setChannels(parsed);
+  };
+
+  const handleSaveToBrowser = () => {
+    const saved = saveLocalPlaylist({
+      slug: customSlug,
+      title: customTitle,
+      channels,
+    });
+    setSavedLists(getLocalPlaylists());
+    alert(\`Saved "\${saved.title}" to browser storage!\`);
+  };
+
+  const handleDownload = () => {
+    downloadCustomM3U(channels, \`\${customSlug}.m3u8\`, customTitle);
+  };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 max-w-7xl mx-auto space-y-6">
+      {/* 100% Client-Side Header */}
+      <header className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">{playlist.title}</h1>
-          <p className="text-xs text-slate-400">/{playlist.slug} · {playlist.totalChannels} channels</p>
+          <h1 className="text-2xl font-black text-cyan-400">M3U FILE PRO</h1>
+          <p className="text-xs text-slate-400">100% Client-Side IPTV Customizer & Downloader</p>
         </div>
-        <a
-          href={\`/api/playlist/\${playlist.slug}?format=m3u\`}
-          className="px-4 py-2 bg-cyan-500 text-slate-950 font-semibold rounded-lg text-xs"
-        >
-          Download M3U
-        </a>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSaveToBrowser}
+            className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs"
+          >
+            Save in Browser
+          </button>
+          <button
+            onClick={handleDownload}
+            className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs"
+          >
+            Download {customSlug}.m3u8
+          </button>
+        </div>
+      </header>
+
+      {/* Upload & Custom Naming */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <input
+          type="file"
+          accept=".m3u,.m3u8"
+          onChange={handleFileUpload}
+          className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300"
+        />
+        <input
+          type="text"
+          value={customSlug}
+          onChange={(e) => setCustomSlug(e.target.value.toLowerCase().replace(/\\s+/g, '-'))}
+          placeholder="custom-slug-name"
+          className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-cyan-300 font-mono"
+        />
       </div>
-      {/* Renders ChannelList & HLS Player */}
-    </div>
+
+      {/* Channel Count & List */}
+      <div className="text-xs text-slate-400">
+        Ready to export: {channels.length} channels
+      </div>
+    </main>
   );
+}
+`,
+  },
+  {
+    id: 'utils-m3u',
+    name: 'src/utils/m3uConverter.ts',
+    language: 'typescript',
+    icon: Download,
+    description: 'In-browser M3U parsing and Blob download generator with zero server latency',
+    content: `export interface ClientChannel {
+  id: string;
+  name: string;
+  url: string;
+  logo?: string;
+  group?: string;
+  tvgId?: string;
+}
+
+/**
+ * Fast client-side M3U manifest parser
+ */
+export function parseM3UClient(content: string): ClientChannel[] {
+  const lines = content.split(/\\r?\\n/);
+  const channels: ClientChannel[] = [];
+  let current: Partial<ClientChannel> | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    if (line.startsWith('#EXTINF:')) {
+      const tvgNameMatch = line.match(/tvg-name="([^"]+)"/i);
+      const tvgLogoMatch = line.match(/tvg-logo="([^"]+)"/i);
+      const groupMatch = line.match(/group-title="([^"]+)"/i);
+      const tvgIdMatch = line.match(/tvg-id="([^"]+)"/i);
+
+      const commaIndex = line.lastIndexOf(',');
+      const rawName = commaIndex !== -1 ? line.substring(commaIndex + 1).trim() : 'Channel';
+
+      current = {
+        id: \`ch-\${channels.length + 1}\`,
+        name: tvgNameMatch?.[1] || rawName,
+        logo: tvgLogoMatch?.[1] || '',
+        group: groupMatch?.[1] || 'General',
+        tvgId: tvgIdMatch?.[1] || '',
+      };
+    } else if (line.startsWith('http://') || line.startsWith('https://')) {
+      if (current) {
+        channels.push({
+          id: current.id || \`ch-\${channels.length + 1}\`,
+          name: current.name || 'Channel',
+          url: line,
+          logo: current.logo,
+          group: current.group || 'General',
+          tvgId: current.tvgId,
+        });
+        current = null;
+      }
+    }
+  }
+
+  return channels;
+}
+
+/**
+ * Triggers 100% browser-side file download with custom filename
+ */
+export function downloadCustomM3U(channels: ClientChannel[], filename: string, title?: string): void {
+  let body = '#EXTM3U\\n';
+  if (title) body += \`## \${title}\\n\`;
+
+  for (const c of channels) {
+    const logoAttr = c.logo ? \` tvg-logo="\${c.logo}"\` : '';
+    const groupAttr = c.group ? \` group-title="\${c.group}"\` : '';
+    const idAttr = c.tvgId ? \` tvg-id="\${c.tvgId}"\` : '';
+    body += \`#EXTINF:-1\${idAttr}\${logoAttr}\${groupAttr},\${c.name}\\n\${c.url}\\n\`;
+  }
+
+  const blob = new Blob([body], { type: 'audio/x-mpegurl;charset=utf-8' });
+  const downloadUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = filename.endsWith('.m3u8') ? filename : \`\${filename}.m3u8\`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+}
+`,
+  },
+  {
+    id: 'utils-storage',
+    name: 'src/utils/localPlaylists.ts',
+    language: 'typescript',
+    icon: HardDrive,
+    description: 'Browser localStorage persistence & hash URL sharing with zero database/backend setup',
+    content: `const KEY = 'm3u_file_playlists';
+
+export function getLocalPlaylists(): any[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalPlaylist(item: { slug: string; title: string; channels: any[] }): any {
+  const current = getLocalPlaylists();
+  const cleanSlug = item.slug.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  const record = {
+    ...item,
+    slug: cleanSlug,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const filtered = current.filter((p) => p.slug !== cleanSlug);
+  const updated = [record, ...filtered];
+  localStorage.setItem(KEY, JSON.stringify(updated));
+  return record;
+}
+
+/**
+ * Creates a 100% client-side shareable URL containing compact channel data in the URL hash
+ */
+export function generateShareableUrl(channels: any[], slug: string): string {
+  if (typeof window === 'undefined') return '';
+  const compact = channels.slice(0, 300).map((c) => ({
+    n: c.name,
+    u: c.url,
+    g: c.group,
+    l: c.logo,
+  }));
+  const base64 = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
+  return \`\${window.location.origin}\${window.location.pathname}#playlist=\${base64}\`;
+}
+`,
+  },
+  {
+    id: 'package-json',
+    name: 'package.json (Zero Backend Dependencies)',
+    language: 'json',
+    icon: FileCode,
+    description: 'Minimal client-side dependencies: React 19, Lucide, Tailwind, and HLS.js',
+    content: `{
+  "name": "m3u-file-client",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.15",
+    "lucide-react": "^0.546.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
 }
 `,
   },
@@ -251,12 +298,12 @@ export const NextjsArchitectureModal: React.FC<NextjsArchitectureModalProps> = (
   isOpen,
   onClose,
 }) => {
-  const [selectedFileId, setSelectedFileId] = useState(NEXTJS_FILES[0].id);
+  const [selectedFileId, setSelectedFileId] = useState(NEXTJS_CLIENT_FILES[0].id);
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
-  const currentFile = NEXTJS_FILES.find((f) => f.id === selectedFileId) || NEXTJS_FILES[0];
+  const currentFile = NEXTJS_CLIENT_FILES.find((f) => f.id === selectedFileId) || NEXTJS_CLIENT_FILES[0];
 
   const handleCopy = () => {
     navigator.clipboard.writeText(currentFile.content);
@@ -270,13 +317,16 @@ export const NextjsArchitectureModal: React.FC<NextjsArchitectureModalProps> = (
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/80">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-violet-400" />
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
             <div>
-              <h3 className="text-sm font-semibold text-white">
-                Next.js (App Router) & Supabase Architecture Guide
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <span>100% Client-Side Next.js Architecture</span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">
+                  No Database · No SQL · No .env.local
+                </span>
               </h3>
               <p className="text-[11px] text-slate-400">
-                Complete production code for deployment on Vercel & Supabase
+                Pure in-browser conversion, client-side Blob downloads, and localStorage persistence
               </p>
             </div>
           </div>
@@ -293,9 +343,9 @@ export const NextjsArchitectureModal: React.FC<NextjsArchitectureModalProps> = (
           {/* File Tree Sidebar */}
           <div className="w-full md:w-64 border-r border-slate-800 bg-slate-950/60 p-3 space-y-1 overflow-y-auto">
             <div className="px-2 py-1 text-[10px] font-mono uppercase text-slate-500 tracking-wider">
-              Project Files
+              Client Architecture Files
             </div>
-            {NEXTJS_FILES.map((file) => {
+            {NEXTJS_CLIENT_FILES.map((file) => {
               const Icon = file.icon;
               const isSelected = file.id === selectedFileId;
               return (
@@ -304,7 +354,7 @@ export const NextjsArchitectureModal: React.FC<NextjsArchitectureModalProps> = (
                   onClick={() => setSelectedFileId(file.id)}
                   className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-violet-600/25 text-violet-300 border border-violet-500/40 font-medium'
+                      ? 'bg-cyan-600/25 text-cyan-300 border border-cyan-500/40 font-medium'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                   }`}
                 >
@@ -336,7 +386,7 @@ export const NextjsArchitectureModal: React.FC<NextjsArchitectureModalProps> = (
 
             {/* Code Pre Tag */}
             <div className="flex-1 p-4 overflow-auto">
-              <pre className="text-xs font-mono text-slate-200 leading-relaxed selection:bg-violet-500/30">
+              <pre className="text-xs font-mono text-slate-200 leading-relaxed selection:bg-cyan-500/30">
                 <code>{currentFile.content}</code>
               </pre>
             </div>
@@ -345,7 +395,10 @@ export const NextjsArchitectureModal: React.FC<NextjsArchitectureModalProps> = (
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between text-xs text-slate-400">
-          <span>Both live in this applet via Express & ready for Next.js App Router export</span>
+          <span className="flex items-center gap-1.5 text-cyan-400">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Zero server overhead · 100% browser-driven execution</span>
+          </span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"

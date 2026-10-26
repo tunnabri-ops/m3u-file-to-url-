@@ -113,6 +113,51 @@ async function startServer() {
     });
   });
 
+  // Direct IPTV Player streaming endpoint at /playlist/:slug
+  app.get('/playlist/:slug', (req, res, next) => {
+    let slug = req.params.slug.toLowerCase().trim();
+    const isM3uExt = slug.endsWith('.m3u') || slug.endsWith('.m3u8');
+    if (isM3uExt) {
+      slug = slug.replace(/\.m3u8?$/, '');
+    }
+
+    const format = (req.query.format as string) || '';
+    const acceptHeader = req.headers.accept || '';
+    const userAgent = (req.headers['user-agent'] || '').toLowerCase();
+    const isIptvClient =
+      userAgent.includes('vlc') ||
+      userAgent.includes('kodi') ||
+      userAgent.includes('tivimate') ||
+      userAgent.includes('ott') ||
+      userAgent.includes('iptv') ||
+      userAgent.includes('exoplayer');
+
+    // If requested by an IPTV player or with m3u format
+    if (isM3uExt || format === 'm3u' || format === 'm3u8' || acceptHeader.includes('mpegurl') || isIptvClient) {
+      const playlists = getPlaylists();
+      const playlist = playlists[slug];
+      if (!playlist) {
+        return res.status(404).send('#EXTM3U\n# Error: Playlist not found\n');
+      }
+
+      res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${slug}.m3u8"`);
+
+      let m3uText = '#EXTM3U\n';
+      (playlist.channels || []).forEach((c: any) => {
+        const logoAttr = c.logo ? ` tvg-logo="${c.logo}"` : '';
+        const groupAttr = c.group ? ` group-title="${c.group}"` : '';
+        const idAttr = c.tvgId ? ` tvg-id="${c.tvgId}"` : '';
+        m3uText += `#EXTINF:-1${idAttr}${logoAttr}${groupAttr},${c.name}\n${c.url}\n`;
+      });
+
+      return res.send(m3uText);
+    }
+
+    // Otherwise proceed to Next.js / React SPA UI
+    next();
+  });
+
   // Create or Update playlist with custom slug
   app.post('/api/playlists', (req, res) => {
     const { slug, title, description, channels } = req.body;
