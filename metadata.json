@@ -1,0 +1,8 @@
+{
+  "name": "M3U to URL Stream Converter & Extractor",
+  "description": "Convert, parse, and extract clean stream URLs, channel logos, and categories from M3U/M3U8 playlists with instant preview, search, and batch export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

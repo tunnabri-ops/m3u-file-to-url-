@@ -1,0 +1,156 @@
+import React from 'react';
+import { Search, Filter, ArrowUpDown, LayoutGrid, List, X } from 'lucide-react';
+import { FilterOptions, ViewMode } from '../types/playlist';
+
+interface ChannelToolbarProps {
+  filters: FilterOptions;
+  onFilterChange: (filters: FilterOptions) => void;
+  groups: string[];
+  totalChannels: number;
+  filteredCount: number;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+}
+
+export const ChannelToolbar: React.FC<ChannelToolbarProps> = ({
+  filters,
+  onFilterChange,
+  groups,
+  totalChannels,
+  filteredCount,
+  viewMode,
+  onViewModeChange,
+}) => {
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onFilterChange({ ...filters, searchQuery: e.target.value });
+  };
+
+  const handleGroupChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onFilterChange({ ...filters, selectedGroup: e.target.value });
+  };
+
+  const handleFormatChange = (format: FilterOptions['formatFilter']) => {
+    onFilterChange({ ...filters, formatFilter: format });
+  };
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onFilterChange({ ...filters, sortBy: e.target.value as FilterOptions['sortBy'] });
+  };
+
+  const handleClearSearch = () => {
+    onFilterChange({ ...filters, searchQuery: '' });
+  };
+
+  return (
+    <div className="w-full space-y-3">
+      {/* Search and Primary Filters Row */}
+      <div className="flex flex-col md:flex-row md:items-center gap-3">
+        {/* Search input with clear button */}
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={filters.searchQuery}
+            onChange={handleSearchChange}
+            placeholder="Search channels, logos, categories, or stream URLs..."
+            className="w-full pl-9 pr-9 py-2 bg-slate-900/90 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/80"
+          />
+          {filters.searchQuery && (
+            <button
+              onClick={handleClearSearch}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Category / Group Dropdown */}
+        <div className="flex items-center gap-2">
+          <div className="relative shrink-0">
+            <select
+              value={filters.selectedGroup}
+              onChange={handleGroupChange}
+              aria-label="Filter channels by category or group"
+              className="appearance-none pl-3 pr-8 py-2 bg-slate-900/90 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500/80 cursor-pointer min-w-[140px]"
+            >
+              <option value="ALL">All Categories ({totalChannels})</option>
+              {groups.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </select>
+            <Filter className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* Sort Selector */}
+          <div className="relative shrink-0">
+            <select
+              value={filters.sortBy}
+              onChange={handleSortChange}
+              aria-label="Sort channels"
+              className="appearance-none pl-3 pr-8 py-2 bg-slate-900/90 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-cyan-500/80 cursor-pointer min-w-[130px]"
+            >
+              <option value="order">Default Order</option>
+              <option value="name-asc">Channel Name (A-Z)</option>
+              <option value="name-desc">Channel Name (Z-A)</option>
+              <option value="group-asc">Category (A-Z)</option>
+            </select>
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center p-1 bg-slate-900/90 border border-slate-800 rounded-xl shrink-0">
+            <button
+              onClick={() => onViewModeChange('list')}
+              title="List view"
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-slate-800 text-cyan-300'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onViewModeChange('grid')}
+              title="Grid card view"
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-slate-800 text-cyan-300'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-row: Protocol Filters & Filter Count */}
+      <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-slate-500 mr-1">Protocol:</span>
+          {(['ALL', 'HLS', 'MP4', 'TS', 'OTHER'] as const).map((fmt) => (
+            <button
+              key={fmt}
+              onClick={() => handleFormatChange(fmt)}
+              className={`px-2.5 py-1 text-[11px] font-mono rounded-md transition-colors cursor-pointer ${
+                filters.formatFilter === fmt
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-medium'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              {fmt}
+            </button>
+          ))}
+        </div>
+
+        <div className="text-[11px] text-slate-500 font-mono tabular-nums">
+          Showing <span className="text-slate-200 font-medium">{filteredCount}</span> of {totalChannels}
+        </div>
+      </div>
+    </div>
+  );
+};
