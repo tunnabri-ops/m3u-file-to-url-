@@ -9,6 +9,7 @@ import { PaginationControls } from './components/PaginationControls';
 import { CustomSlugCreator } from './components/CustomSlugCreator';
 import { ChannelEditorModal } from './components/ChannelEditorModal';
 import { XtreamCodesModal } from './components/XtreamCodesModal';
+import { FastApiBackendModal } from './components/FastApiBackendModal';
 import { NextjsArchitectureModal } from './components/NextjsArchitectureModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { ExportModal } from './components/ExportModal';
@@ -17,8 +18,10 @@ import { parseM3UAsync, ParseProgress } from './utils/workerParser';
 import { SAMPLE_PLAYLISTS } from './utils/samplePlaylists';
 import { checkStreamStatus, StreamHealthResult } from './utils/streamChecker';
 import { getPlaylistBySlug } from './utils/localPlaylistStorage';
-import { Channel, PlaylistData, FilterOptions, ViewMode } from './types/playlist';
-import { Check, Layers, Zap, Terminal } from 'lucide-react';
+import { getSavedFavorites, toggleFavoriteInStorage } from './utils/favoritesStorage';
+import { getSavedTheme, saveTheme, THEME_CONFIG } from './utils/themeHelper';
+import { Channel, PlaylistData, FilterOptions, ViewMode, AccentTheme, ResolutionTag } from './types/playlist';
+import { Check, Layers, Zap, Terminal, Server, Star } from 'lucide-react';
 
 export default function App() {
   const [playlist, setPlaylist] = useState<PlaylistData>(() => {
@@ -31,6 +34,27 @@ export default function App() {
     parseTimeMs: 14,
     channelCount: 4,
   });
+
+  // Theme & Accent State
+  const [currentTheme, setCurrentTheme] = useState<AccentTheme>(getSavedTheme);
+  const activeThemeConfig = THEME_CONFIG[currentTheme];
+
+  const handleThemeChange = (theme: AccentTheme) => {
+    setCurrentTheme(theme);
+    saveTheme(theme);
+  };
+
+  // Favorites / Bookmarks State
+  const [favorites, setFavorites] = useState<Set<string>>(() => getSavedFavorites());
+
+  const handleToggleFavorite = (channelId: string) => {
+    const isNowFav = toggleFavoriteInStorage(channelId);
+    setFavorites(getSavedFavorites());
+    const ch = playlist.channels.find((c) => c.id === channelId);
+    showToast(isNowFav ? `★ Bookmarked "${ch?.name || 'Channel'}"` : `Removed "${ch?.name || 'Channel'}" from bookmarks`);
+  };
+
+  const isFavorited = (channelId: string) => favorites.has(channelId);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -45,6 +69,7 @@ export default function App() {
   const [activeChannelForPlayer, setActiveChannelForPlayer] = useState<Channel | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isXtreamModalOpen, setIsXtreamModalOpen] = useState(false);
+  const [isFastApiModalOpen, setIsFastApiModalOpen] = useState(false);
   const [isNextjsModalOpen, setIsNextjsModalOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -60,6 +85,8 @@ export default function App() {
     selectedGroup: 'ALL',
     formatFilter: 'ALL',
     statusFilter: 'ALL',
+    resolutionFilter: 'ALL',
+    onlyFavorites: false,
     sortBy: 'order',
   });
 
@@ -76,7 +103,7 @@ export default function App() {
     }, 2800);
   };
 
-  // Check URL pathname for /playlist/:slug on mount
+  // Check URL pathname for /playlist/:slug or URL hash on mount
   useEffect(() => {
     const pathname = window.location.pathname;
     if (pathname.startsWith('/playlist/')) {
@@ -110,11 +137,11 @@ export default function App() {
     }
   }, []);
 
-  // Load a saved playlist from localStorage (100% client-side) or fallback
+  // Load a saved playlist from localStorage (100% client-side) or fallback to server route
   const loadSavedPlaylist = async (slug: string) => {
     setIsLoading(true);
 
-    // 1. Check browser local storage first (instant, 100% offline & client-side)
+    // 1. Check browser local storage first
     const local = getPlaylistBySlug(slug);
     if (local) {
       const groups = Array.from(new Set(local.channels.map((c) => c.group || 'General'))).sort();
@@ -128,18 +155,21 @@ export default function App() {
         channelsWithLogo: local.channels.filter((c: Channel) => !!c.logo).length,
         parsedAt: local.updatedAt,
         updatedAt: local.updatedAt,
+        epgUrl: local.epgUrl,
       });
       setFilters({
         searchQuery: '',
         selectedGroup: 'ALL',
         formatFilter: 'ALL',
         statusFilter: 'ALL',
+        resolutionFilter: 'ALL',
+        onlyFavorites: false,
         sortBy: 'order',
       });
       setCurrentPage(1);
       setStreamHealthMap({});
       setIsLoading(false);
-      showToast(`Loaded "${local.title}" from browser storage`);
+      showToast(`Loaded "${local.title}"`);
       return;
     }
 
@@ -158,12 +188,15 @@ export default function App() {
         channelsWithLogo: (data.channels || []).filter((c: Channel) => !!c.logo).length,
         parsedAt: data.updatedAt || new Date().toISOString(),
         updatedAt: data.updatedAt,
+        epgUrl: data.epgUrl,
       });
       setFilters({
         searchQuery: '',
         selectedGroup: 'ALL',
         formatFilter: 'ALL',
         statusFilter: 'ALL',
+        resolutionFilter: 'ALL',
+        onlyFavorites: false,
         sortBy: 'order',
       });
       setCurrentPage(1);
@@ -252,8 +285,37 @@ export default function App() {
 
     setIsCheckingAll(false);
     setProbeProgress(null);
-    showToast(`Health probe finished for ${channels.length} streams.`);
+    showToast(`Bulk health probe complete for ${channels.length} streams.`);
   }, [playlist.channels, isCheckingAll]);
+
+  // Dead Channel Remover: Purges all streams marked as 'offline' from active playlist
+  const handleRemoveDeadChannels = useCallback(() => {
+    const deadUrls = new Set<string>();
+    playlist.channels.forEach((c) => {
+      if (streamHealthMap[c.url]?.status === 'offline') {
+        deadUrls.add(c.url);
+      }
+    });
+
+    if (deadUrls.size === 0) {
+      showToast('No offline channels detected to remove.');
+      return;
+    }
+
+    setPlaylist((prev) => {
+      const aliveChannels = prev.channels.filter((c) => !deadUrls.has(c.url));
+      const groups = Array.from(new Set(aliveChannels.map((c) => c.group || 'General'))).sort();
+      return {
+        ...prev,
+        channels: aliveChannels,
+        groups,
+        totalChannels: aliveChannels.length,
+        channelsWithLogo: aliveChannels.filter((c) => !!c.logo).length,
+      };
+    });
+
+    showToast(`Purged ${deadUrls.size} dead channels from playlist!`);
+  }, [playlist.channels, streamHealthMap]);
 
   // Initial probe of sample streams on first mount
   useEffect(() => {
@@ -288,6 +350,8 @@ export default function App() {
           selectedGroup: 'ALL',
           formatFilter: 'ALL',
           statusFilter: 'ALL',
+          resolutionFilter: 'ALL',
+          onlyFavorites: false,
           sortBy: 'order',
         });
         setCurrentPage(1);
@@ -386,13 +450,14 @@ export default function App() {
     });
   };
 
-  const handlePlaylistSaved = (slug: string, title: string) => {
+  const handlePlaylistSaved = (slug: string, title: string, epgUrl?: string) => {
     setPlaylist((prev) => ({
       ...prev,
       slug,
       title,
+      epgUrl: epgUrl || prev.epgUrl,
     }));
-    showToast(`Saved and deployed to /playlist/${slug}`);
+    showToast(`Saved & deployed to /playlist/${slug}`);
   };
 
   const channelCountsByGroup = useMemo(() => {
@@ -404,10 +469,32 @@ export default function App() {
     return counts;
   }, [playlist.channels]);
 
+  // Compute counts by resolution tag
+  const resolutionCounts = useMemo<Record<ResolutionTag, number>>(() => {
+    const counts: Record<ResolutionTag, number> = {
+      '4K': 0,
+      'FHD': 0,
+      'HD': 0,
+      'SD': 0,
+      'OTHER': 0,
+    };
+    playlist.channels.forEach((c) => {
+      const tag = c.resolution || 'OTHER';
+      counts[tag] = (counts[tag] || 0) + 1;
+    });
+    return counts;
+  }, [playlist.channels]);
+
+  // Total favorites count in current playlist
+  const favoritesCount = useMemo(() => {
+    return playlist.channels.filter((c) => favorites.has(c.id) || favorites.has(c.url)).length;
+  }, [playlist.channels, favorites]);
+
   // Filtered and Sorted Channels
   const filteredChannels = useMemo(() => {
     let result = [...playlist.channels];
 
+    // Search query filter
     if (filters.searchQuery.trim()) {
       const q = filters.searchQuery.toLowerCase();
       result = result.filter(
@@ -415,14 +502,24 @@ export default function App() {
           c.name.toLowerCase().includes(q) ||
           c.url.toLowerCase().includes(q) ||
           c.group.toLowerCase().includes(q) ||
+          (c.resolution && c.resolution.toLowerCase().includes(q)) ||
           (c.tvgId && c.tvgId.toLowerCase().includes(q))
       );
     }
 
-    if (filters.selectedGroup !== 'ALL') {
+    // Favorites only filter (via button or tab)
+    if (filters.onlyFavorites || filters.selectedGroup === '__FAVORITES__') {
+      result = result.filter((c) => favorites.has(c.id) || favorites.has(c.url));
+    } else if (filters.selectedGroup !== 'ALL') {
       result = result.filter((c) => c.group === filters.selectedGroup);
     }
 
+    // Resolution & Quality filter (4K, FHD, HD, SD)
+    if (filters.resolutionFilter !== 'ALL') {
+      result = result.filter((c) => c.resolution === filters.resolutionFilter);
+    }
+
+    // Format protocol filter
     if (filters.formatFilter !== 'ALL') {
       if (filters.formatFilter === 'OTHER') {
         result = result.filter((c) => c.format !== 'HLS' && c.format !== 'MP4' && c.format !== 'TS');
@@ -431,6 +528,7 @@ export default function App() {
       }
     }
 
+    // Status filter (Live / Offline / Unchecked)
     if (filters.statusFilter !== 'ALL') {
       result = result.filter((c) => {
         const health = streamHealthMap[c.url];
@@ -441,6 +539,7 @@ export default function App() {
       });
     }
 
+    // Sorting
     if (filters.sortBy === 'name-asc') {
       result.sort((a, b) => a.name.localeCompare(b.name));
     } else if (filters.sortBy === 'name-desc') {
@@ -450,7 +549,7 @@ export default function App() {
     }
 
     return result;
-  }, [playlist.channels, filters, streamHealthMap]);
+  }, [playlist.channels, filters, streamHealthMap, favorites]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -463,17 +562,28 @@ export default function App() {
             backgroundSize: '40px 40px',
           }}
         />
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[750px] h-[450px] bg-cyan-500/10 blur-[140px] rounded-full" />
+        <div
+          className={`absolute -top-40 left-1/2 -translate-x-1/2 w-[750px] h-[450px] blur-[140px] rounded-full transition-colors duration-700 ${
+            currentTheme === 'cyan'
+              ? 'bg-cyan-500/10'
+              : currentTheme === 'purple'
+              ? 'bg-purple-600/12'
+              : 'bg-emerald-500/10'
+          }`}
+        />
         <div className="absolute top-[35%] -right-40 w-[550px] h-[550px] bg-violet-600/10 blur-[150px] rounded-full" />
         <div className="absolute bottom-10 -left-40 w-[550px] h-[550px] bg-indigo-600/10 blur-[160px] rounded-full" />
       </div>
 
-      {/* Top Bar with M3U FILE branding and responsive layout */}
+      {/* Top Bar with M3U FILE branding, Theme Switcher, and FastAPI Code button */}
       <Header
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenXtream={() => setIsXtreamModalOpen(true)}
         onOpenNextjs={() => setIsNextjsModalOpen(true)}
+        onOpenFastApi={() => setIsFastApiModalOpen(true)}
         channelCount={playlist.totalChannels}
+        currentTheme={currentTheme}
+        onThemeChange={handleThemeChange}
       />
 
       {/* Main Content Viewport */}
@@ -489,15 +599,17 @@ export default function App() {
           onReset={handleReset}
         />
 
-        {/* Custom Link Naming (Slug Creator & Database Publisher) */}
+        {/* Custom Link Naming (Slug Creator & EPG Publisher) */}
         {playlist.totalChannels > 0 && (
           <section id="slug-creator">
             <CustomSlugCreator
               currentChannels={playlist.channels}
               currentTitle={playlist.title}
               currentSlug={playlist.slug}
+              currentEpgUrl={playlist.epgUrl}
               onPlaylistSaved={handlePlaylistSaved}
               onLoadSavedPlaylist={loadSavedPlaylist}
+              currentTheme={currentTheme}
             />
           </section>
         )}
@@ -505,7 +617,7 @@ export default function App() {
         {/* Channels Workspace */}
         {playlist.totalChannels > 0 && (
           <section id="channels" className="space-y-4 pt-2">
-            {/* Stats Bar */}
+            {/* Stats Bar with Bulk Health Checker & Dead Channel Remover */}
             <StatsBar
               playlist={playlist}
               onCopyAllUrls={handleCopyAllUrls}
@@ -517,9 +629,11 @@ export default function App() {
               probeProgress={probeProgress}
               statusFilter={filters.statusFilter}
               onStatusFilterChange={(st) => handleFilterChange({ ...filters, statusFilter: st })}
+              onRemoveDeadChannels={handleRemoveDeadChannels}
+              currentTheme={currentTheme}
             />
 
-            {/* Interactive Category Group Tabs */}
+            {/* Interactive Category Group Tabs + Favorites Tab */}
             {playlist.groups.length > 0 && (
               <CategoryTabs
                 groups={playlist.groups}
@@ -527,10 +641,12 @@ export default function App() {
                 onSelectGroup={(group) => handleFilterChange({ ...filters, selectedGroup: group })}
                 channelCountsByGroup={channelCountsByGroup}
                 totalChannels={playlist.totalChannels}
+                favoritesCount={favoritesCount}
+                currentTheme={currentTheme}
               />
             )}
 
-            {/* Filter & Search Toolbar */}
+            {/* Filter & Search Toolbar with Resolution Filter & Favorites Toggle */}
             <ChannelToolbar
               filters={filters}
               onFilterChange={handleFilterChange}
@@ -539,6 +655,9 @@ export default function App() {
               filteredCount={filteredChannels.length}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
+              favoritesCount={favoritesCount}
+              resolutionCounts={resolutionCounts}
+              currentTheme={currentTheme}
             />
 
             {/* Top Pagination Bar */}
@@ -553,7 +672,7 @@ export default function App() {
               }}
             />
 
-            {/* Virtualized/Paginated Channel List & Grid */}
+            {/* Channel List & Grid with Resolution Badges and Bookmarks */}
             <ChannelList
               channels={filteredChannels}
               viewMode={viewMode}
@@ -568,9 +687,12 @@ export default function App() {
               onEditChannel={handleEditChannel}
               onDeleteChannel={handleDeleteChannel}
               onAddNewChannel={handleAddNewChannel}
+              isFavorited={isFavorited}
+              onToggleFavorite={handleToggleFavorite}
+              currentTheme={currentTheme}
             />
 
-            {/* Bottom Pagination Bar for smooth browsing without having to scroll back to top */}
+            {/* Bottom Pagination Bar */}
             {filteredChannels.length > pageSize && (
               <PaginationControls
                 currentPage={currentPage}
@@ -594,47 +716,56 @@ export default function App() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-white mb-1">
-                M3U FILE Performance Architecture
+                M3U FILE Performance & Full-Stack Architecture
               </h2>
               <p className="text-xs text-slate-400">
-                Non-blocking Web Worker parser and virtual pagination handle massive IPTV playlists with zero UI freezing.
+                Python FastAPI backend with asynchronous HTTPX stream probing, combined with Web Worker frontend parsing for lag-free performance.
               </p>
             </div>
-            <button
-              onClick={() => setIsNextjsModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-mono transition-colors cursor-pointer self-start sm:self-auto min-h-[36px]"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>Client Next.js</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFastApiModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/50 hover:bg-emerald-950/70 text-emerald-300 border border-emerald-500/40 text-xs font-mono transition-colors cursor-pointer min-h-[36px]"
+              >
+                <Server className="w-3.5 h-3.5 text-emerald-400" />
+                <span>FastAPI Code</span>
+              </button>
+              <button
+                onClick={() => setIsNextjsModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-mono transition-colors cursor-pointer min-h-[36px]"
+              >
+                <Terminal className="w-3.5 h-3.5" />
+                <span>Client Architecture</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
               <h3 className="text-xs font-semibold text-cyan-400 mb-1 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5" />
-                <span>Web Worker Threading</span>
+                <span>Python FastAPI Streaming</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Manifest parsing executes in an isolated background thread. Even 50,000+ line playlists process without dropping a single UI frame.
+                Direct endpoint <code>/playlist/:slug</code> serves valid <code>audio/x-mpegurl</code> with XMLTV EPG injection for VLC, Kodi, and TiviMate.
               </p>
             </div>
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
               <h3 className="text-xs font-semibold text-indigo-400 mb-1 flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5" />
-                <span>Virtual Pagination Windowing</span>
+                <span>Bulk Health Diagnostics</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Only the active viewport slice (25–500 channels) is rendered in the DOM, keeping memory footprint low and scrolling smooth on mobile and PC.
+                High-concurrency stream health verification with 1-click dead channel purging to keep your IPTV playlists clean and functional.
               </p>
             </div>
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
-              <h3 className="text-xs font-semibold text-violet-400 mb-1 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5" />
-                <span>Mobile & Desktop Responsive</span>
+              <h3 className="text-xs font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
+                <Star className="w-3.5 h-3.5" />
+                <span>Quality & Favorites Filter</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Touch-first controls, collapsible drawers, adaptive tabular layouts, and auto-scrolling ensure a first-class experience on any device.
+                Instant resolution classification (4K, FHD, HD, SD) and local bookmarking system with dedicated export capabilities.
               </p>
             </div>
           </div>
@@ -645,17 +776,23 @@ export default function App() {
       <footer className="border-t border-slate-900 bg-slate-950/90 py-6 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-cyan-400" />
+            <Zap className={`w-4 h-4 ${activeThemeConfig.textAccent}`} />
             <span className="font-bold text-slate-300">M3U FILE</span>
             <span aria-hidden="true" className="text-slate-800">·</span>
-            <span>High Performance Web Worker IPTV Converter</span>
+            <span>Python FastAPI & Web Worker IPTV Stream Manager</span>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsFastApiModalOpen(true)}
+              className="text-emerald-400 hover:text-emerald-300 font-mono cursor-pointer"
+            >
+              FastAPI Backend
+            </button>
             <button
               onClick={() => setIsNextjsModalOpen(true)}
               className="text-violet-400 hover:text-violet-300 font-mono cursor-pointer"
             >
-              Next.js Code
+              Client Code
             </button>
             <button
               onClick={() => setIsXtreamModalOpen(true)}
@@ -692,7 +829,14 @@ export default function App() {
         onClose={() => setIsXtreamModalOpen(false)}
       />
 
-      {/* Next.js & Supabase Architecture Modal */}
+      {/* Python FastAPI Backend Explorer Modal */}
+      <FastApiBackendModal
+        isOpen={isFastApiModalOpen}
+        onClose={() => setIsFastApiModalOpen(false)}
+        currentTheme={currentTheme}
+      />
+
+      {/* Next.js & Client Architecture Modal */}
       <NextjsArchitectureModal
         isOpen={isNextjsModalOpen}
         onClose={() => setIsNextjsModalOpen(false)}
@@ -709,8 +853,8 @@ export default function App() {
 
       {/* Toast Feedback Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-slate-900 border border-cyan-500/40 text-cyan-300 rounded-xl shadow-2xl text-xs font-medium backdrop-blur-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <Check className="w-4 h-4 text-cyan-400" />
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-slate-900 border ${activeThemeConfig.borderAccent} ${activeThemeConfig.textMuted} rounded-xl shadow-2xl text-xs font-medium backdrop-blur-lg animate-in fade-in slide-in-from-bottom-2 duration-200`}>
+          <Check className={`w-4 h-4 ${activeThemeConfig.textAccent}`} />
           <span>{toastMessage}</span>
         </div>
       )}

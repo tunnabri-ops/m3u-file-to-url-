@@ -90,7 +90,12 @@ async function startServer() {
       res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${slug}.m3u8"`);
 
-      let m3uText = '#EXTM3U\n';
+      let m3uText = '#EXTM3U';
+      if (playlist.epgUrl) {
+        m3uText += ` url-tvg="${playlist.epgUrl.trim()}"`;
+      }
+      m3uText += '\n';
+
       (playlist.channels || []).forEach((c: any) => {
         const logoAttr = c.logo ? ` tvg-logo="${c.logo}"` : '';
         const groupAttr = c.group ? ` group-title="${c.group}"` : '';
@@ -106,6 +111,7 @@ async function startServer() {
       slug: playlist.slug,
       title: playlist.title,
       description: playlist.description,
+      epgUrl: playlist.epgUrl,
       updatedAt: playlist.updatedAt,
       totalChannels: (playlist.channels || []).length,
       channels: playlist.channels || [],
@@ -143,7 +149,12 @@ async function startServer() {
       res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
       res.setHeader('Content-Disposition', `inline; filename="${slug}.m3u8"`);
 
-      let m3uText = '#EXTM3U\n';
+      let m3uText = '#EXTM3U';
+      if (playlist.epgUrl) {
+        m3uText += ` url-tvg="${playlist.epgUrl.trim()}"`;
+      }
+      m3uText += '\n';
+
       (playlist.channels || []).forEach((c: any) => {
         const logoAttr = c.logo ? ` tvg-logo="${c.logo}"` : '';
         const groupAttr = c.group ? ` group-title="${c.group}"` : '';
@@ -160,7 +171,7 @@ async function startServer() {
 
   // Create or Update playlist with custom slug
   app.post('/api/playlists', (req, res) => {
-    const { slug, title, description, channels } = req.body;
+    const { slug, title, description, epgUrl, channels } = req.body;
 
     if (!slug || typeof slug !== 'string') {
       return res.status(400).json({ error: 'Valid slug is required' });
@@ -186,6 +197,7 @@ async function startServer() {
       slug: cleanSlug,
       title: title?.trim() || cleanSlug,
       description: description?.trim() || '',
+      epgUrl: epgUrl?.trim() || '',
       channels,
       updatedAt: new Date().toISOString(),
     };

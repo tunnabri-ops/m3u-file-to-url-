@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Play, Copy, Check, Tv, Edit3, Trash2, Plus } from 'lucide-react';
-import { Channel, ViewMode, StreamHealthResult } from '../types/playlist';
+import { Play, Copy, Check, Tv, Edit3, Trash2, Plus, Star } from 'lucide-react';
+import { Channel, ViewMode, StreamHealthResult, AccentTheme } from '../types/playlist';
 import { StatusBadge } from './StatusBadge';
+import { getResolutionBadgeStyle } from '../utils/resolutionHelper';
+import { THEME_CONFIG } from '../utils/themeHelper';
 
 interface ChannelListProps {
   channels: Channel[];
@@ -17,6 +19,9 @@ interface ChannelListProps {
   onAddNewChannel: () => void;
   currentPage: number;
   pageSize: number;
+  isFavorited?: (id: string) => boolean;
+  onToggleFavorite?: (id: string) => void;
+  currentTheme?: AccentTheme;
 }
 
 export const ChannelList: React.FC<ChannelListProps> = ({
@@ -33,8 +38,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   onAddNewChannel,
   currentPage,
   pageSize,
+  isFavorited,
+  onToggleFavorite,
+  currentTheme = 'cyan',
 }) => {
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
+  const theme = THEME_CONFIG[currentTheme];
 
   const handleLogoError = (id: string) => {
     setFailedLogos((prev) => ({ ...prev, [id]: true }));
@@ -46,11 +55,11 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         <Tv className="w-10 h-10 mx-auto text-slate-600 mb-3" />
         <h4 className="text-sm font-semibold text-slate-300 mb-1">No channels found</h4>
         <p className="text-xs text-slate-500 mb-4">
-          Try adjusting your search query, status filters, format filters, or category selection.
+          Try adjusting your search query, resolution, favorites, or status filters.
         </p>
         <button
           onClick={onAddNewChannel}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition-colors cursor-pointer min-h-[40px]"
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold ${theme.bgSubtle} ${theme.textAccent} border ${theme.borderAccent} hover:bg-opacity-20 transition-colors cursor-pointer min-h-[40px]`}
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Channel Manually</span>
@@ -69,12 +78,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       <div className="flex items-center justify-between px-1">
         <div className="text-xs text-slate-400 font-mono">
           Page {currentPage} of {Math.max(1, Math.ceil(channels.length / pageSize))} · Showing{' '}
-          <span className="text-cyan-300 font-semibold">{paginatedChannels.length}</span> of{' '}
+          <span className={`${theme.textAccent} font-semibold`}>{paginatedChannels.length}</span> of{' '}
           <span className="text-white font-semibold">{channels.length}</span> channels
         </div>
         <button
           onClick={onAddNewChannel}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900/80 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/60 transition-all cursor-pointer min-h-[36px]"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900/80 hover:bg-slate-800 ${theme.textAccent} border ${theme.borderAccent} transition-all cursor-pointer min-h-[36px]`}
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Channel</span>
@@ -82,16 +91,18 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       </div>
 
       {viewMode === 'list' ? (
-        /* List / Tabular View */
-        <div className="glass-panel rounded-2xl border border-slate-800/80 overflow-hidden shadow-xl">
-          <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
-            <table className="w-full text-left border-collapse min-w-[680px]">
+        /* Tabular List View */
+        <div className="glass-panel rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800/80 bg-slate-900/60 text-[11px] text-slate-400 uppercase tracking-wider font-mono">
-                  <th className="py-3 px-3 sm:px-4 w-12 text-center">#</th>
+                  <th className="py-3 px-3 sm:px-4 w-10 text-center">Fav</th>
+                  <th className="py-3 px-2 w-10 text-center">#</th>
                   <th className="py-3 px-3 sm:px-4">Channel</th>
                   <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Category</th>
                   <th className="py-3 px-3 sm:px-4 text-center">Status</th>
+                  <th className="py-3 px-3 sm:px-4 text-center">Quality</th>
                   <th className="py-3 px-3 sm:px-4">Stream URL</th>
                   <th className="py-3 px-3 sm:px-4 text-center w-20">Format</th>
                   <th className="py-3 px-3 sm:px-4 text-right w-36">Actions</th>
@@ -104,6 +115,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                   const isCopied = copiedId === channel.id;
                   const health = streamHealthMap[channel.url];
                   const isChecking = checkingUrls.has(channel.url);
+                  const isFav = isFavorited ? isFavorited(channel.id) || isFavorited(channel.url) : false;
+                  const resBadge = getResolutionBadgeStyle(channel.resolution);
 
                   return (
                     <tr
@@ -111,8 +124,21 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                       className="hover:bg-slate-800/40 transition-colors group"
                       style={{ contain: 'content' }}
                     >
+                      {/* Favorite Bookmark */}
+                      <td className="py-3 px-3 text-center">
+                        {onToggleFavorite && (
+                          <button
+                            onClick={() => onToggleFavorite(channel.id)}
+                            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                            className="p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer text-slate-500 hover:text-amber-400"
+                          >
+                            <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-slate-600'}`} />
+                          </button>
+                        )}
+                      </td>
+
                       {/* Numerical index */}
-                      <td className="py-3 px-3 sm:px-4 text-center font-mono tabular-nums text-slate-500 text-[11px]">
+                      <td className="py-3 px-2 text-center font-mono tabular-nums text-slate-500 text-[11px]">
                         {globalIdx}
                       </td>
 
@@ -130,13 +156,13 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                                 className="w-full h-full object-contain p-0.5"
                               />
                             ) : (
-                              <span className="text-[10px] font-bold font-mono text-cyan-400">
+                              <span className={`text-[10px] font-bold font-mono ${theme.textAccent}`}>
                                 {channel.name.slice(0, 2).toUpperCase()}
                               </span>
                             )}
                           </div>
                           <div className="truncate max-w-[160px] sm:max-w-[220px]">
-                            <span className="font-medium text-slate-200 block truncate group-hover:text-cyan-300 transition-colors">
+                            <span className={`font-medium text-slate-200 block truncate group-hover:${theme.textAccent} transition-colors`}>
                               {channel.name}
                             </span>
                             {channel.tvgId && (
@@ -164,11 +190,22 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                         />
                       </td>
 
+                      {/* Resolution / Quality */}
+                      <td className="py-3 px-3 sm:px-4 text-center whitespace-nowrap">
+                        {resBadge.label ? (
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${resBadge.className}`}>
+                            {resBadge.label}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-slate-600">—</span>
+                        )}
+                      </td>
+
                       {/* Stream URL */}
                       <td className="py-3 px-3 sm:px-4 max-w-[180px] lg:max-w-xs">
                         <span
                           title={channel.url}
-                          className="font-mono text-[11px] text-slate-400 block truncate hover:text-cyan-300 transition-colors select-all"
+                          className={`font-mono text-[11px] text-slate-400 block truncate hover:${theme.textAccent} transition-colors select-all`}
                         >
                           {channel.url}
                         </span>
@@ -176,7 +213,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
                       {/* Format Badge */}
                       <td className="py-3 px-3 sm:px-4 text-center">
-                        <span className="font-mono text-[10px] text-cyan-300/90 font-medium">
+                        <span className={`font-mono text-[10px] ${theme.textMuted} font-medium`}>
                           {channel.format}
                         </span>
                       </td>
@@ -188,9 +225,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                           <button
                             onClick={() => onPlayChannel(channel)}
                             title="Play Live Stream"
-                            className="p-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all cursor-pointer active:scale-95 min-h-[32px] min-w-[32px] flex items-center justify-center"
+                            className={`p-1.5 rounded-lg ${theme.bgSubtle} hover:${theme.borderGlow} ${theme.textAccent} border ${theme.borderAccent} transition-all cursor-pointer active:scale-95 min-h-[32px] min-w-[32px] flex items-center justify-center`}
                           >
-                            <Play className="w-3.5 h-3.5 fill-cyan-400" />
+                            <Play className="w-3.5 h-3.5 fill-current" />
                           </button>
 
                           {/* Copy URL Button */}
@@ -214,7 +251,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                           <button
                             onClick={() => onEditChannel(channel)}
                             title="Edit channel metadata"
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
+                            className={`p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:${theme.textAccent} transition-colors cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center`}
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -245,14 +282,16 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             const isCopied = copiedId === channel.id;
             const health = streamHealthMap[channel.url];
             const isChecking = checkingUrls.has(channel.url);
+            const isFav = isFavorited ? isFavorited(channel.id) || isFavorited(channel.url) : false;
+            const resBadge = getResolutionBadgeStyle(channel.resolution);
 
             return (
               <div
                 key={channel.id}
-                className="glass-card rounded-2xl p-4 flex flex-col justify-between group hover:border-cyan-500/40 relative overflow-hidden"
+                className={`glass-card rounded-2xl p-4 flex flex-col justify-between group hover:${theme.borderAccent} relative overflow-hidden`}
               >
                 <div>
-                  {/* Top card row: logo + status badge + format */}
+                  {/* Top card row: logo + favorite + status badge + format */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
                       {hasLogo ? (
@@ -265,7 +304,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                           className="w-full h-full object-contain p-1"
                         />
                       ) : (
-                        <span className="text-xs font-bold font-mono text-cyan-400">
+                        <span className={`text-xs font-bold font-mono ${theme.textAccent}`}>
                           {channel.name.slice(0, 2).toUpperCase()}
                         </span>
                       )}
@@ -273,24 +312,40 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
                     <div className="flex flex-col items-end gap-1.5">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[10px] text-cyan-400">
+                        {onToggleFavorite && (
+                          <button
+                            onClick={() => onToggleFavorite(channel.id)}
+                            title={isFav ? 'Remove favorite' : 'Bookmark'}
+                            className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-amber-400"
+                          >
+                            <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-slate-600'}`} />
+                          </button>
+                        )}
+                        <span className={`font-mono text-[10px] ${theme.textAccent}`}>
                           {channel.format}
                         </span>
                         <span className="font-mono text-[10px] text-slate-600 tabular-nums">
                           #{globalIdx}
                         </span>
                       </div>
-                      <StatusBadge
-                        health={health}
-                        isChecking={isChecking}
-                        onCheck={() => onCheckChannel(channel)}
-                        compact
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {resBadge.label && (
+                          <span className={`text-[9px] font-mono px-1 py-0.5 rounded ${resBadge.className}`}>
+                            {resBadge.label}
+                          </span>
+                        )}
+                        <StatusBadge
+                          health={health}
+                          isChecking={isChecking}
+                          onCheck={() => onCheckChannel(channel)}
+                          compact
+                        />
+                      </div>
                     </div>
                   </div>
 
                   {/* Channel Title & Category */}
-                  <h4 className="text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors truncate mb-1">
+                  <h4 className={`text-sm font-semibold text-white group-hover:${theme.textAccent} transition-colors truncate mb-1`}>
                     {channel.name}
                   </h4>
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-3 truncate">
@@ -313,9 +368,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                 <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/60">
                   <button
                     onClick={() => onPlayChannel(channel)}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer min-h-[36px]"
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-lg ${theme.bgSubtle} hover:bg-opacity-30 ${theme.textAccent} border ${theme.borderAccent} transition-colors cursor-pointer min-h-[36px]`}
                   >
-                    <Play className="w-3 h-3 fill-cyan-400" />
+                    <Play className="w-3 h-3 fill-current" />
                     <span>Test</span>
                   </button>
 
@@ -338,7 +393,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                   <button
                     onClick={() => onEditChannel(channel)}
                     title="Edit channel"
-                    className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-300 hover:bg-slate-800 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+                    className={`p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:${theme.textAccent} hover:bg-slate-800 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center`}
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>

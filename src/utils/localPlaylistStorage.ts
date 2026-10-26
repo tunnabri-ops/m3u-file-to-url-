@@ -7,6 +7,7 @@ export interface LocalSavedPlaylist {
   channelCount: number;
   channels: Channel[];
   updatedAt: string;
+  epgUrl?: string;
 }
 
 const STORAGE_KEY = 'm3u_file_local_playlists';
@@ -50,6 +51,7 @@ export function savePlaylistLocally(data: {
   title: string;
   description?: string;
   channels: Channel[];
+  epgUrl?: string;
 }): LocalSavedPlaylist {
   const cleanSlug = data.slug
     .toLowerCase()
@@ -65,6 +67,7 @@ export function savePlaylistLocally(data: {
     channelCount: data.channels.length,
     channels: data.channels,
     updatedAt: new Date().toISOString(),
+    epgUrl: data.epgUrl?.trim() || undefined,
   };
 
   const existing = getStoredPlaylists();
@@ -113,10 +116,15 @@ export function deletePlaylistLocally(slug: string): boolean {
 }
 
 /**
- * Builds valid standard #EXTM3U playlist content from channel records.
+ * Builds valid standard #EXTM3U playlist content from channel records with optional EPG link.
  */
-export function generateM3UContent(channels: Channel[], playlistTitle?: string): string {
-  let content = '#EXTM3U\n';
+export function generateM3UContent(channels: Channel[], playlistTitle?: string, epgUrl?: string): string {
+  let content = '#EXTM3U';
+  if (epgUrl) {
+    content += ` url-tvg="${epgUrl.trim()}"`;
+  }
+  content += '\n';
+
   if (playlistTitle) {
     content += `## ${playlistTitle}\n`;
   }
@@ -136,8 +144,8 @@ export function generateM3UContent(channels: Channel[], playlistTitle?: string):
 /**
  * Triggers a 100% client-side file download for the M3U playlist.
  */
-export function downloadClientM3U(channels: Channel[], filename: string, title?: string): void {
-  const m3uText = generateM3UContent(channels, title);
+export function downloadClientM3U(channels: Channel[], filename: string, title?: string, epgUrl?: string): void {
+  const m3uText = generateM3UContent(channels, title, epgUrl);
   const blob = new Blob([m3uText], { type: 'audio/x-mpegurl;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   

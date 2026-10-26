@@ -12,8 +12,18 @@ interface Channel {
   tvgId: string;
   tvgName?: string;
   tvgChno?: string;
+  resolution?: '4K' | 'FHD' | 'HD' | 'SD' | 'OTHER';
   format: 'HLS' | 'MP4' | 'TS' | 'DASH' | 'STREAM';
   rawExtinf?: string;
+}
+
+function detectResolution(name: string, url: string = ''): '4K' | 'FHD' | 'HD' | 'SD' | 'OTHER' {
+  const text = `${name} ${url}`.toLowerCase();
+  if (/\b(4k|uhd|2160p?|3840|4096)\b/i.test(text)) return '4K';
+  if (/\b(1080p?|1080i|fhd|full\s*hd|fullhd)\b/i.test(text)) return 'FHD';
+  if (/\b(720p?|720i|\bhd\b)\b/i.test(text)) return 'HD';
+  if (/\b(576p?|480p?|360p?|\bsd\b)\b/i.test(text)) return 'SD';
+  return 'OTHER';
 }
 
 function detectFormat(url: string): Channel['format'] {
@@ -65,11 +75,20 @@ self.onmessage = function (e: MessageEvent<{ content: string; filename?: string 
 
   let currentExtinf = '';
   let currentGroupFromTag = '';
+  let epgUrl = '';
   let lastProgressReportTime = Date.now();
 
   for (let i = 0; i < totalLines; i++) {
     const line = lines[i].trim();
     if (!line) continue;
+
+    if (line.startsWith('#EXTM3U')) {
+      const tvgUrl = parseAttribute(line, 'url-tvg') || parseAttribute(line, 'x-tvg-url');
+      if (tvgUrl) {
+        epgUrl = tvgUrl;
+      }
+      continue;
+    }
 
     if (line.startsWith('#EXTINF:')) {
       currentExtinf = line;
@@ -146,6 +165,7 @@ self.onmessage = function (e: MessageEvent<{ content: string; filename?: string 
         tvgId,
         tvgName,
         tvgChno,
+        resolution: detectResolution(name, streamUrl),
         format: detectFormat(streamUrl),
         rawExtinf: currentExtinf,
       });
@@ -154,7 +174,7 @@ self.onmessage = function (e: MessageEvent<{ content: string; filename?: string 
       currentGroupFromTag = '';
     }
 
-    // Send progress report every 50ms or 5000 lines
+    // Send progress report every 50ms or on completion
     const now = Date.now();
     if (now - lastProgressReportTime > 50 || i === totalLines - 1) {
       const percent = Math.round((i / totalLines) * 100);
@@ -183,6 +203,7 @@ self.onmessage = function (e: MessageEvent<{ content: string; filename?: string 
       totalChannels: channels.length,
       channelsWithLogo,
       parsedAt: new Date().toISOString(),
+      epgUrl: epgUrl || undefined,
     },
     parseTimeMs,
   });

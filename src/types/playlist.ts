@@ -1,5 +1,8 @@
 import { StreamHealthResult } from '../utils/streamChecker';
 
+export type ResolutionTag = '4K' | 'FHD' | 'HD' | 'SD' | 'OTHER';
+export type AccentTheme = 'cyan' | 'purple' | 'emerald';
+
 export interface Channel {
   id: string;
   name: string;
@@ -9,6 +12,7 @@ export interface Channel {
   tvgId: string;
   tvgName?: string;
   tvgChno?: string;
+  resolution?: ResolutionTag;
   format: 'HLS' | 'MP4' | 'TS' | 'DASH' | 'STREAM';
   rawExtinf?: string;
 }
@@ -23,6 +27,7 @@ export interface PlaylistData {
   channelsWithLogo: number;
   parsedAt: string;
   updatedAt?: string;
+  epgUrl?: string;
 }
 
 export interface SavedPlaylistSummary {
@@ -32,6 +37,7 @@ export interface SavedPlaylistSummary {
   updatedAt: string;
   channelCount: number;
   groups: string[];
+  epgUrl?: string;
 }
 
 export interface FilterOptions {
@@ -39,6 +45,8 @@ export interface FilterOptions {
   selectedGroup: string;
   formatFilter: 'ALL' | 'HLS' | 'MP4' | 'TS' | 'OTHER';
   statusFilter: 'ALL' | 'LIVE' | 'OFFLINE' | 'UNCHECKED';
+  resolutionFilter: 'ALL' | '4K' | 'FHD' | 'HD' | 'SD';
+  onlyFavorites: boolean;
   sortBy: 'order' | 'name-asc' | 'name-desc' | 'group-asc';
 }
 

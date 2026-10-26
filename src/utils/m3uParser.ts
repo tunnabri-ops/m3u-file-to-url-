@@ -1,4 +1,5 @@
 import { Channel, PlaylistData } from '../types/playlist';
+import { detectResolution } from './resolutionHelper';
 
 function detectFormat(url: string): Channel['format'] {
   const cleanUrl = url.toLowerCase().split('?')[0];
@@ -11,13 +12,12 @@ function detectFormat(url: string): Channel['format'] {
 }
 
 function parseAttribute(line: string, attrName: string): string {
-  // Regex to match attr="value" or attr='value' or attr=value
-  const regex = new RegExp(`${attrName}=["']?([^"'>\\s]+)["']?`, 'i');
   const quotedRegex = new RegExp(`${attrName}="([^"]*)"`, 'i');
   const quotedMatch = line.match(quotedRegex);
   if (quotedMatch && quotedMatch[1] !== undefined) {
     return quotedMatch[1].trim();
   }
+  const regex = new RegExp(`${attrName}=["']?([^"'>\\s]+)["']?`, 'i');
   const match = line.match(regex);
   return match && match[1] ? match[1].trim() : '';
 }
@@ -41,12 +41,22 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
 
   let currentExtinf = '';
   let currentGroupFromTag = '';
+  let epgUrl = '';
 
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
     const line = rawLine.trim();
 
     if (!line) continue;
+
+    // Check for EXTM3U header and extract EPG
+    if (line.startsWith('#EXTM3U')) {
+      const tvgUrl = parseAttribute(line, 'url-tvg') || parseAttribute(line, 'x-tvg-url');
+      if (tvgUrl) {
+        epgUrl = tvgUrl;
+      }
+      continue;
+    }
 
     // Check for EXTINF
     if (line.startsWith('#EXTINF:')) {
@@ -76,13 +86,11 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
       let tvgChno = '';
 
       if (currentExtinf) {
-        // Extract comma and channel name
         const commaIndex = currentExtinf.lastIndexOf(',');
         if (commaIndex !== -1) {
           name = currentExtinf.substring(commaIndex + 1).trim();
         }
 
-        // Extract attributes
         logo = parseAttribute(currentExtinf, 'tvg-logo');
         group = parseAttribute(currentExtinf, 'group-title');
         tvgId = parseAttribute(currentExtinf, 'tvg-id');
@@ -90,7 +98,6 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
         tvgChno = parseAttribute(currentExtinf, 'tvg-chno');
       }
 
-      // Fallback group from #EXTGRP if not found in attributes
       if (!group && currentGroupFromTag) {
         group = currentGroupFromTag;
       }
@@ -98,7 +105,6 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
         group = 'General';
       }
 
-      // Fallback name if title is empty
       if (!name) {
         if (tvgName) {
           name = tvgName;
@@ -116,7 +122,7 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
       groupsSet.add(group);
 
       channels.push({
-        id: `ch-${channels.length + 1}-${Date.now().toString(36)}`,
+        id: `ch-${channels.length + 1}-${i.toString(36)}`,
         name,
         url: streamUrl,
         logo,
@@ -124,18 +130,19 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
         tvgId,
         tvgName,
         tvgChno,
+        resolution: detectResolution(name, streamUrl),
         format: detectFormat(streamUrl),
         rawExtinf: currentExtinf,
       });
 
-      // Reset for next stream item
+      // Reset state for next channel
       currentExtinf = '';
       currentGroupFromTag = '';
     }
   }
 
   const groups = Array.from(groupsSet).sort((a, b) => a.localeCompare(b));
-  const channelsWithLogo = channels.filter(ch => !!ch.logo).length;
+  const channelsWithLogo = channels.filter((ch) => !!ch.logo).length;
 
   return {
     title: filename.replace(/\.[^/.]+$/, '') || 'Stream Playlist',
@@ -145,58 +152,71 @@ export function parseM3U(content: string, filename = 'playlist.m3u'): PlaylistDa
     totalChannels: channels.length,
     channelsWithLogo,
     parsedAt: new Date().toISOString(),
+    epgUrl: epgUrl || undefined,
   };
 }
 
-export function exportCleanM3U(playlist: PlaylistData, channelsToExport?: Channel[]): string {
-  const items = channelsToExport || playlist.channels;
-  const lines: string[] = ['#EXTM3U'];
+export function exportCleanM3U(
+  playlistOrChannels: PlaylistData | Channel[],
+  channelsOrTitle?: Channel[] | string,
+  maybeEpgUrl?: string
+): string {
+  let channels: Channel[] = [];
+  let title = '';
+  let epgUrl: string | undefined;
 
-  items.forEach(channel => {
-    const attrs: string[] = [];
-    if (channel.tvgId) attrs.push(`tvg-id="${channel.tvgId}"`);
-    if (channel.tvgName) attrs.push(`tvg-name="${channel.tvgName}"`);
-    if (channel.logo) attrs.push(`tvg-logo="${channel.logo}"`);
-    if (channel.group) attrs.push(`group-title="${channel.group}"`);
-    if (channel.tvgChno) attrs.push(`tvg-chno="${channel.tvgChno}"`);
+  if (Array.isArray(playlistOrChannels)) {
+    channels = playlistOrChannels;
+    if (typeof channelsOrTitle === 'string') {
+      title = channelsOrTitle;
+    }
+    epgUrl = maybeEpgUrl;
+  } else {
+    channels = Array.isArray(channelsOrTitle) ? channelsOrTitle : playlistOrChannels.channels || [];
+    title = playlistOrChannels.title || '';
+    epgUrl = playlistOrChannels.epgUrl;
+  }
 
-    const attrStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
-    lines.push(`#EXTINF:-1${attrStr},${channel.name}`);
-    lines.push(channel.url);
-  });
+  let content = '#EXTM3U';
+  if (epgUrl) {
+    content += ` url-tvg="${epgUrl.trim()}"`;
+  }
+  content += '\n';
 
-  return lines.join('\n');
+  if (title) {
+    content += `## ${title}\n`;
+  }
+
+  for (const c of channels) {
+    const idAttr = c.tvgId ? ` tvg-id="${c.tvgId}"` : '';
+    const nameAttr = c.name ? ` tvg-name="${c.name}"` : '';
+    const logoAttr = c.logo ? ` tvg-logo="${c.logo}"` : '';
+    const groupAttr = c.group ? ` group-title="${c.group}"` : '';
+    content += `#EXTINF:-1${idAttr}${nameAttr}${logoAttr}${groupAttr},${c.name}\n${c.url}\n`;
+  }
+
+  return content;
 }
 
 export function exportPlainUrls(channels: Channel[]): string {
-  return channels.map(ch => ch.url).join('\n');
+  return channels.map((c) => c.url).join('\n');
 }
 
 export function exportJSON(channels: Channel[]): string {
-  return JSON.stringify(
-    channels.map(ch => ({
-      name: ch.name,
-      url: ch.url,
-      group: ch.group,
-      logo: ch.logo,
-      tvgId: ch.tvgId,
-      format: ch.format,
-    })),
-    null,
-    2
-  );
+  return JSON.stringify(channels, null, 2);
 }
 
 export function exportCSV(channels: Channel[]): string {
-  const headers = ['Channel Name', 'Stream URL', 'Group / Category', 'Logo URL', 'TVG ID', 'Format'];
-  const rows = channels.map(ch => [
-    `"${(ch.name || '').replace(/"/g, '""')}"`,
-    `"${(ch.url || '').replace(/"/g, '""')}"`,
-    `"${(ch.group || '').replace(/"/g, '""')}"`,
-    `"${(ch.logo || '').replace(/"/g, '""')}"`,
-    `"${(ch.tvgId || '').replace(/"/g, '""')}"`,
-    `"${ch.format}"`,
-  ]);
-
-  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const header = 'Name,Group,URL,Logo,TvgId,Format,Resolution';
+  const rows = channels.map((c) => {
+    const name = `"${(c.name || '').replace(/"/g, '""')}"`;
+    const group = `"${(c.group || '').replace(/"/g, '""')}"`;
+    const url = `"${(c.url || '').replace(/"/g, '""')}"`;
+    const logo = `"${(c.logo || '').replace(/"/g, '""')}"`;
+    const tvgId = `"${(c.tvgId || '').replace(/"/g, '""')}"`;
+    const format = c.format || 'STREAM';
+    const resolution = c.resolution || 'OTHER';
+    return `${name},${group},${url},${logo},${tvgId},${format},${resolution}`;
+  });
+  return [header, ...rows].join('\n');
 }
