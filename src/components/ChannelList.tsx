@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Copy, Check, Tv } from 'lucide-react';
+import { Play, Copy, Check, Tv, Edit3, Trash2, Plus } from 'lucide-react';
 import { Channel, ViewMode, StreamHealthResult } from '../types/playlist';
 import { StatusBadge } from './StatusBadge';
 
@@ -12,6 +12,9 @@ interface ChannelListProps {
   streamHealthMap: Record<string, StreamHealthResult>;
   onCheckChannel: (channel: Channel) => void;
   checkingUrls: Set<string>;
+  onEditChannel: (channel: Channel) => void;
+  onDeleteChannel: (channelId: string) => void;
+  onAddNewChannel: () => void;
 }
 
 export const ChannelList: React.FC<ChannelListProps> = ({
@@ -23,6 +26,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   streamHealthMap,
   onCheckChannel,
   checkingUrls,
+  onEditChannel,
+  onDeleteChannel,
+  onAddNewChannel,
 }) => {
   const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
 
@@ -35,15 +41,36 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       <div className="glass-panel rounded-2xl p-12 text-center border border-slate-800">
         <Tv className="w-10 h-10 mx-auto text-slate-600 mb-3" />
         <h4 className="text-sm font-semibold text-slate-300 mb-1">No channels found</h4>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 mb-4">
           Try adjusting your search query, status filters, format filters, or category selection.
         </p>
+        <button
+          onClick={onAddNewChannel}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition-colors cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Channel Manually</span>
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-3">
+      {/* Quick Add Bar */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium text-slate-400">
+          Channel Directory ({channels.length})
+        </span>
+        <button
+          onClick={onAddNewChannel}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900/80 hover:bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/60 transition-all cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Channel</span>
+        </button>
+      </div>
+
       {viewMode === 'list' ? (
         /* List / Tabular View */
         <div className="glass-panel rounded-2xl border border-slate-800/80 overflow-hidden">
@@ -57,7 +84,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                   <th className="py-3 px-4 text-center">Health Status</th>
                   <th className="py-3 px-4">Stream URL</th>
                   <th className="py-3 px-4 text-center w-20">Format</th>
-                  <th className="py-3 px-4 text-right w-28">Actions</th>
+                  <th className="py-3 px-4 text-right w-36">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-xs">
@@ -147,7 +174,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                           {/* Test Play Stream Button */}
                           <button
                             onClick={() => onPlayChannel(channel)}
-                            title="Play Stream Preview"
+                            title="Play Live Stream"
                             className="p-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all cursor-pointer active:scale-95"
                           >
                             <Play className="w-3.5 h-3.5 fill-cyan-400" />
@@ -168,6 +195,24 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                             ) : (
                               <Copy className="w-3.5 h-3.5" />
                             )}
+                          </button>
+
+                          {/* Edit Channel Button */}
+                          <button
+                            onClick={() => onEditChannel(channel)}
+                            title="Edit channel metadata"
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete Channel Button */}
+                          <button
+                            onClick={() => onDeleteChannel(channel.id)}
+                            title="Delete channel from playlist"
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 border border-slate-700 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -256,7 +301,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                     className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer"
                   >
                     <Play className="w-3 h-3 fill-cyan-400" />
-                    <span>Test Stream</span>
+                    <span>Test</span>
                   </button>
 
                   <button
@@ -273,6 +318,22 @@ export const ChannelList: React.FC<ChannelListProps> = ({
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
+                  </button>
+
+                  <button
+                    onClick={() => onEditChannel(channel)}
+                    title="Edit channel"
+                    className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => onDeleteChannel(channel.id)}
+                    title="Delete channel"
+                    className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>

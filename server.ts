@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
@@ -6,15 +7,174 @@ import { createServer as createViteServer } from 'vite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const DATA_FILE = path.resolve(__dirname, 'src/data/playlists.json');
+
+// Helper to read stored playlists
+function getPlaylists(): Record<string, any> {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = fs.readFileSync(DATA_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Error reading playlists.json:', err);
+  }
+  return {};
+}
+
+// Helper to save stored playlists
+function savePlaylists(playlists: Record<string, any>) {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(playlists, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing playlists.json:', err);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || '3000', 10);
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Check if a slug is available
+  app.get('/api/check-slug/:slug', (req, res) => {
+    const rawSlug = req.params.slug || '';
+    const cleanSlug = rawSlug.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
+    const playlists = getPlaylists();
+    const exists = !!playlists[cleanSlug];
+    res.json({
+      slug: cleanSlug,
+      available: !exists,
+    });
+  });
+
+  // List all saved custom playlists
+  app.get('/api/playlists', (req, res) => {
+    const playlists = getPlaylists();
+    const list = Object.values(playlists).map((p: any) => ({
+      slug: p.slug,
+      title: p.title || p.slug,
+      description: p.description || '',
+      updatedAt: p.updatedAt,
+      channelCount: Array.isArray(p.channels) ? p.channels.length : 0,
+      groups: Array.from(new Set((p.channels || []).map((c: any) => c.group || 'General'))),
+    }));
+    res.json({ playlists: list });
+  });
+
+  // Get a specific playlist by slug (supports JSON or raw M3U streaming output!)
+  app.get('/api/playlist/:slug', (req, res) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const playlists = getPlaylists();
+    const playlist = playlists[slug];
+
+    if (!playlist) {
+      return res.status(404).json({ error: `Playlist with slug '${slug}' not found` });
+    }
+
+    const format = (req.query.format as string) || '';
+    const acceptHeader = req.headers.accept || '';
+
+    // If client requested raw M3U (via ?format=m3u or IPTV client accept header)
+    if (format === 'm3u' || format === 'm3u8' || acceptHeader.includes('mpegurl')) {
+      res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${slug}.m3u8"`);
+
+      let m3uText = '#EXTM3U\n';
+      (playlist.channels || []).forEach((c: any) => {
+        const logoAttr = c.logo ? ` tvg-logo="${c.logo}"` : '';
+        const groupAttr = c.group ? ` group-title="${c.group}"` : '';
+        const idAttr = c.tvgId ? ` tvg-id="${c.tvgId}"` : '';
+        m3uText += `#EXTINF:-1${idAttr}${logoAttr}${groupAttr},${c.name}\n${c.url}\n`;
+      });
+
+      return res.send(m3uText);
+    }
+
+    // Default JSON output
+    res.json({
+      slug: playlist.slug,
+      title: playlist.title,
+      description: playlist.description,
+      updatedAt: playlist.updatedAt,
+      totalChannels: (playlist.channels || []).length,
+      channels: playlist.channels || [],
+      groups: Array.from(new Set((playlist.channels || []).map((c: any) => c.group || 'General'))),
+    });
+  });
+
+  // Create or Update playlist with custom slug
+  app.post('/api/playlists', (req, res) => {
+    const { slug, title, description, channels } = req.body;
+
+    if (!slug || typeof slug !== 'string') {
+      return res.status(400).json({ error: 'Valid slug is required' });
+    }
+
+    const cleanSlug = slug
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (cleanSlug.length < 2) {
+      return res.status(400).json({ error: 'Slug must be at least 2 characters long' });
+    }
+
+    if (!Array.isArray(channels) || channels.length === 0) {
+      return res.status(400).json({ error: 'At least one channel is required' });
+    }
+
+    const playlists = getPlaylists();
+    const updatedPlaylist = {
+      slug: cleanSlug,
+      title: title?.trim() || cleanSlug,
+      description: description?.trim() || '',
+      channels,
+      updatedAt: new Date().toISOString(),
+    };
+
+    playlists[cleanSlug] = updatedPlaylist;
+    savePlaylists(playlists);
+
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol;
+    const baseUrl = `${protocol}://${host}`;
+
+    res.json({
+      success: true,
+      slug: cleanSlug,
+      title: updatedPlaylist.title,
+      totalChannels: channels.length,
+      shareUrl: `${baseUrl}/playlist/${cleanSlug}`,
+      m3uStreamUrl: `${baseUrl}/api/playlist/${cleanSlug}?format=m3u`,
+      updatedAt: updatedPlaylist.updatedAt,
+    });
+  });
+
+  // Delete a playlist
+  app.delete('/api/playlist/:slug', (req, res) => {
+    const slug = req.params.slug.toLowerCase().trim();
+    const playlists = getPlaylists();
+
+    if (!playlists[slug]) {
+      return res.status(404).json({ error: 'Playlist not found' });
+    }
+
+    delete playlists[slug];
+    savePlaylists(playlists);
+    res.json({ success: true, message: `Playlist '${slug}' deleted` });
   });
 
   // Single stream URL prober using lightweight HEAD or Range GET request
@@ -35,7 +195,6 @@ async function startServer() {
     };
 
     try {
-      // 1. Attempt lightweight HEAD request first
       let response = await fetch(targetUrl, {
         method: 'HEAD',
         headers,
@@ -43,7 +202,6 @@ async function startServer() {
         redirect: 'follow',
       });
 
-      // 2. If HEAD is disallowed by stream server (405 or 501), retry with lightweight ranged GET (1KB)
       if (response.status === 405 || response.status === 501) {
         response = await fetch(targetUrl, {
           method: 'GET',
@@ -93,17 +251,16 @@ async function startServer() {
     }
   });
 
-  // Batch prober with bounded concurrency
+  // Batch stream prober
   app.post('/api/check-streams-batch', async (req, res) => {
     const { urls } = req.body;
     if (!Array.isArray(urls)) {
       return res.status(400).json({ error: 'urls array required' });
     }
 
-    const maxToProbe = urls.slice(0, 50); // limit batch to 50 max per call
-    const results: Record<string, unknown> = {};
+    const maxToProbe = urls.slice(0, 50);
+    const results: Record<string, any> = {};
 
-    // Run probes in chunks of 6 concurrent requests
     const CHUNK_SIZE = 6;
     for (let i = 0; i < maxToProbe.length; i += CHUNK_SIZE) {
       const chunk = maxToProbe.slice(i, i + CHUNK_SIZE);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Download, Check, FileCode, FileText, Database, Share2, Code } from 'lucide-react';
+import { X, Copy, Download, Check, Share2, Server } from 'lucide-react';
 import { Channel, PlaylistData } from '../types/playlist';
 import { exportCleanM3U, exportPlainUrls, exportJSON, exportCSV } from '../utils/m3uParser';
 import { generateSingleFileHtml } from '../utils/standaloneHtmlGenerator';
@@ -15,13 +15,51 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   filteredChannels,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'m3u' | 'txt' | 'json' | 'csv' | 'share' | 'standalone'>('m3u');
+  const [activeTab, setActiveTab] = useState<'m3u' | 'txt' | 'json' | 'csv' | 'xtream' | 'share' | 'standalone'>('m3u');
   const [exportScope, setExportScope] = useState<'all' | 'filtered'>('all');
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
 
   const channelsToUse = exportScope === 'filtered' ? filteredChannels : playlist.channels;
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://yoursite.com';
 
-  const getExportContent = (format: 'm3u' | 'txt' | 'json' | 'csv' | 'standalone') => {
+  const exportXtreamFormat = (channels: Channel[]) => {
+    const slug = playlist.slug || 'custom-list';
+    return JSON.stringify(
+      {
+        server_info: {
+          server_url: origin,
+          port: '443',
+          https_port: '443',
+          server_protocol: 'https',
+        },
+        user_info: {
+          username: `user_${slug.replace(/[^a-z0-9]/g, '')}`,
+          password: 'iptv-password',
+          status: 'Active',
+          max_connections: '5',
+        },
+        m3u_plus_url: `${origin}/api/playlist/${slug}?format=m3u&type=m3u_plus`,
+        player_api_url: `${origin}/api/playlist/${slug}?player_api=true`,
+        categories: Array.from(new Set(channels.map((c) => c.group || 'General'))).map((g, idx) => ({
+          category_id: `${idx + 1}`,
+          category_name: g,
+        })),
+        channels: channels.map((c, idx) => ({
+          num: idx + 1,
+          name: c.name,
+          stream_id: idx + 1001,
+          stream_icon: c.logo,
+          epg_channel_id: c.tvgId,
+          category_name: c.group,
+          direct_source: c.url,
+        })),
+      },
+      null,
+      2
+    );
+  };
+
+  const getExportContent = (format: 'm3u' | 'txt' | 'json' | 'csv' | 'xtream' | 'standalone') => {
     switch (format) {
       case 'm3u':
         return exportCleanM3U(playlist, channelsToUse);
@@ -31,6 +69,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         return exportJSON(channelsToUse);
       case 'csv':
         return exportCSV(channelsToUse);
+      case 'xtream':
+        return exportXtreamFormat(channelsToUse);
       case 'standalone':
         return generateSingleFileHtml();
       default:
@@ -58,13 +98,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const currentContent = activeTab !== 'share' ? getExportContent(activeTab) : '';
 
-  // Shareable URL generator
   const getShareableUrl = () => {
-    const dataToShare = channelsToUse.slice(0, 30).map(c => ({
+    if (playlist.slug) {
+      return `${origin}/playlist/${playlist.slug}`;
+    }
+    const dataToShare = channelsToUse.slice(0, 30).map((c) => ({
       n: c.name,
       u: c.url,
       g: c.group,
-      l: c.logo || undefined
+      l: c.logo || undefined,
     }));
     try {
       const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(dataToShare))));
@@ -81,10 +123,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/80">
           <div>
             <h3 className="text-base font-semibold text-white">
-              Export Channels & Playlists
+              Export Channels & Formats
             </h3>
             <p className="text-xs text-slate-400">
-              Download clean formats or generate standalone files
+              Clean M3U8, plain URLs, JSON, CSV, Xtream Codes, or Standalone HTML
             </p>
           </div>
           <button
@@ -98,7 +140,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         {/* Scope selector & Tabs */}
         <div className="px-6 py-3 border-b border-slate-800/80 bg-slate-950/40 flex flex-wrap items-center justify-between gap-3">
           {/* Format Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-slate-900 rounded-xl border border-slate-800 text-xs font-medium">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-900 rounded-xl border border-slate-800 text-xs font-medium">
             <button
               onClick={() => setActiveTab('m3u')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -132,9 +174,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               CSV
             </button>
             <button
+              onClick={() => setActiveTab('xtream')}
+              className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                activeTab === 'xtream' ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Xtream Codes
+            </button>
+            <button
               onClick={() => setActiveTab('share')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'share' ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:text-white'
+                activeTab === 'share' ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-white'
               }`}
             >
               Share Link
@@ -142,14 +192,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <button
               onClick={() => setActiveTab('standalone')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'standalone' ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-white'
+                activeTab === 'standalone' ? 'bg-sky-500/20 text-sky-300' : 'text-slate-400 hover:text-white'
               }`}
             >
               Standalone HTML
             </button>
           </div>
 
-          {/* Export Scope (All vs Filtered) */}
+          {/* Export Scope */}
           {activeTab !== 'standalone' && activeTab !== 'share' && (
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
               <span className="text-[11px]">Scope:</span>
@@ -184,10 +234,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-cyan-400">
                   <Share2 className="w-5 h-5" />
-                  <h4 className="text-sm font-semibold text-white">Unique Shareable Link</h4>
+                  <h4 className="text-sm font-semibold text-white">Permanent Shareable Link</h4>
                 </div>
                 <p className="text-xs text-slate-400">
-                  This URL embeds your playlist channel snapshot in the hash parameter so you or your recipients can load and preview these channels instantly in any browser.
+                  {playlist.slug
+                    ? `This playlist is published at /playlist/${playlist.slug}. Recipients can view and stream it immediately.`
+                    : 'This URL embeds your playlist channel snapshot in the hash parameter for instant sharing.'}
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -221,7 +273,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 <span>
                   {activeTab === 'standalone'
                     ? 'Self-contained single-file HTML version'
-                    : `Previewing ${channelsToUse.length} channels`}
+                    : `Previewing ${channelsToUse.length} channels (${activeTab.toUpperCase()})`}
                 </span>
                 <span className="font-mono text-[11px]">
                   {Math.round(currentContent.length / 1024)} KB
@@ -267,7 +319,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
               <button
                 onClick={() => {
-                  const baseName = playlist.title || 'playlist';
+                  const baseName = playlist.slug || playlist.title || 'playlist';
                   if (activeTab === 'm3u') {
                     handleDownload(`${baseName}_clean.m3u8`, currentContent, 'audio/x-mpegurl');
                   } else if (activeTab === 'txt') {
@@ -276,6 +328,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     handleDownload(`${baseName}.json`, currentContent, 'application/json');
                   } else if (activeTab === 'csv') {
                     handleDownload(`${baseName}.csv`, currentContent, 'text/csv');
+                  } else if (activeTab === 'xtream') {
+                    handleDownload(`xtream_${baseName}.json`, currentContent, 'application/json');
                   } else if (activeTab === 'standalone') {
                     handleDownload(`m3u-converter.html`, currentContent, 'text/html');
                   }
@@ -289,7 +343,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     ? '.m3u8'
                     : activeTab === 'txt'
                     ? '.txt'
-                    : activeTab === 'json'
+                    : activeTab === 'json' || activeTab === 'xtream'
                     ? '.json'
                     : activeTab === 'csv'
                     ? '.csv'

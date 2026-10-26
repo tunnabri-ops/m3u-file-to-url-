@@ -2,28 +2,39 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from './components/Header';
 import { UploadSection } from './components/UploadSection';
 import { StatsBar } from './components/StatsBar';
+import { CategoryTabs } from './components/CategoryTabs';
 import { ChannelToolbar } from './components/ChannelToolbar';
 import { ChannelList } from './components/ChannelList';
+import { CustomSlugCreator } from './components/CustomSlugCreator';
+import { ChannelEditorModal } from './components/ChannelEditorModal';
+import { XtreamCodesModal } from './components/XtreamCodesModal';
+import { NextjsArchitectureModal } from './components/NextjsArchitectureModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { ExportModal } from './components/ExportModal';
 import { parseM3U } from './utils/m3uParser';
 import { SAMPLE_PLAYLISTS } from './utils/samplePlaylists';
 import { checkStreamStatus, StreamHealthResult } from './utils/streamChecker';
 import { Channel, PlaylistData, FilterOptions, ViewMode } from './types/playlist';
-import { Check, Layers } from 'lucide-react';
+import { Check, Layers, Sparkles, Terminal } from 'lucide-react';
 
 export default function App() {
   const [playlist, setPlaylist] = useState<PlaylistData>(() => {
-    return parseM3U(SAMPLE_PLAYLISTS[0].content, 'featured-streams.m3u');
+    return parseM3U(SAMPLE_PLAYLISTS[0].content, 'featured-cinema.m3u');
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCopiedAll, setIsCopiedAll] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+
+  // Modals state
   const [activeChannelForPlayer, setActiveChannelForPlayer] = useState<Channel | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [isXtreamModalOpen, setIsXtreamModalOpen] = useState(false);
+  const [isNextjsModalOpen, setIsNextjsModalOpen] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   // Stream health state tracking
   const [streamHealthMap, setStreamHealthMap] = useState<Record<string, StreamHealthResult>>({});
@@ -44,6 +55,75 @@ export default function App() {
     setTimeout(() => {
       setToastMessage(null);
     }, 2800);
+  };
+
+  // Check URL pathname for /playlist/:slug on mount
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    if (pathname.startsWith('/playlist/')) {
+      const slug = pathname.replace('/playlist/', '').replace(/\/$/, '');
+      if (slug) {
+        loadSavedPlaylist(slug);
+        return;
+      }
+    }
+
+    // Check hash for encoded playlist
+    try {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith('#playlist=')) {
+        const b64 = hash.replace('#playlist=', '');
+        const jsonStr = decodeURIComponent(escape(atob(b64)));
+        const sharedChannels = JSON.parse(jsonStr);
+        if (Array.isArray(sharedChannels) && sharedChannels.length > 0) {
+          let reconstructedM3U = '#EXTM3U\n';
+          sharedChannels.forEach((c: { n: string; u: string; g?: string; l?: string }) => {
+            const logoAttr = c.l ? ` tvg-logo="${c.l}"` : '';
+            const groupAttr = c.g ? ` group-title="${c.g}"` : '';
+            reconstructedM3U += `#EXTINF:-1${logoAttr}${groupAttr},${c.n}\n${c.u}\n`;
+          });
+          const parsed = parseM3U(reconstructedM3U, 'shared-playlist.m3u');
+          setPlaylist(parsed);
+          showToast('Loaded shared playlist from URL link!');
+        }
+      }
+    } catch {
+      // Ignore hash parse error
+    }
+  }, []);
+
+  // Load a saved playlist from server database by slug
+  const loadSavedPlaylist = async (slug: string) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/playlist/${slug}`);
+      if (!res.ok) throw new Error('Playlist not found');
+      const data = await res.json();
+      setPlaylist({
+        title: data.title,
+        slug: data.slug,
+        filename: `${data.slug}.m3u8`,
+        channels: data.channels || [],
+        groups: data.groups || [],
+        totalChannels: data.totalChannels || 0,
+        channelsWithLogo: (data.channels || []).filter((c: Channel) => !!c.logo).length,
+        parsedAt: data.updatedAt || new Date().toISOString(),
+        updatedAt: data.updatedAt,
+      });
+      setFilters({
+        searchQuery: '',
+        selectedGroup: 'ALL',
+        formatFilter: 'ALL',
+        statusFilter: 'ALL',
+        sortBy: 'order',
+      });
+      setStreamHealthMap({});
+      showToast(`Loaded playlist: /${slug}`);
+    } catch {
+      showToast(`Could not load playlist /${slug}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Function to perform lightweight HEAD/Range check on a single channel
@@ -86,7 +166,6 @@ export default function App() {
     const channels = playlist.channels;
     setProbeProgress({ current: 0, total: channels.length });
 
-    // Mark all as checking
     setStreamHealthMap((prev) => {
       const next = { ...prev };
       channels.forEach((c) => {
@@ -128,36 +207,10 @@ export default function App() {
 
   // Initial probe of sample streams on first mount
   useEffect(() => {
-    // Automatically probe the initial sample streams so user sees Live/Offline badges immediately
     const timer = setTimeout(() => {
       handleCheckAllStreams();
-    }, 500);
+    }, 600);
     return () => clearTimeout(timer);
-  }, []);
-
-  // Check URL hash for shared playlist data on mount
-  useEffect(() => {
-    try {
-      const hash = window.location.hash;
-      if (hash && hash.startsWith('#playlist=')) {
-        const b64 = hash.replace('#playlist=', '');
-        const jsonStr = decodeURIComponent(escape(atob(b64)));
-        const sharedChannels = JSON.parse(jsonStr);
-        if (Array.isArray(sharedChannels) && sharedChannels.length > 0) {
-          let reconstructedM3U = '#EXTM3U\n';
-          sharedChannels.forEach((c: { n: string; u: string; g?: string; l?: string }) => {
-            const logoAttr = c.l ? ` tvg-logo="${c.l}"` : '';
-            const groupAttr = c.g ? ` group-title="${c.g}"` : '';
-            reconstructedM3U += `#EXTINF:-1${logoAttr}${groupAttr},${c.n}\n${c.u}\n`;
-          });
-          const parsed = parseM3U(reconstructedM3U, 'shared-playlist.m3u');
-          setPlaylist(parsed);
-          showToast('Loaded shared playlist from URL link!');
-        }
-      }
-    } catch {
-      // Ignore hash parse error
-    }
   }, []);
 
   const handleParseContent = (content: string, filename = 'playlist.m3u') => {
@@ -165,7 +218,7 @@ export default function App() {
     setTimeout(() => {
       const parsed = parseM3U(content, filename);
       if (parsed.channels.length === 0) {
-        showToast('No valid stream URLs detected in provided content.');
+        showToast('No valid stream URLs detected in file.');
       } else {
         setPlaylist(parsed);
         setStreamHealthMap({});
@@ -215,6 +268,75 @@ export default function App() {
       setIsCopiedAll(false);
     }, 2500);
   };
+
+  // Channel Editing & Deletion Handlers
+  const handleEditChannel = (channel: Channel) => {
+    setEditingChannel(channel);
+    setIsEditorOpen(true);
+  };
+
+  const handleAddNewChannel = () => {
+    setEditingChannel(null);
+    setIsEditorOpen(true);
+  };
+
+  const handleSaveChannel = (channel: Channel) => {
+    setPlaylist((prev) => {
+      const exists = prev.channels.some((c) => c.id === channel.id);
+      let updatedChannels: Channel[];
+      if (exists) {
+        updatedChannels = prev.channels.map((c) => (c.id === channel.id ? channel : c));
+        showToast(`Updated "${channel.name}"`);
+      } else {
+        updatedChannels = [channel, ...prev.channels];
+        showToast(`Added channel "${channel.name}"`);
+      }
+
+      const groups = Array.from(new Set(updatedChannels.map((c) => c.group || 'General'))).sort();
+      return {
+        ...prev,
+        channels: updatedChannels,
+        groups,
+        totalChannels: updatedChannels.length,
+        channelsWithLogo: updatedChannels.filter((c) => !!c.logo).length,
+      };
+    });
+  };
+
+  const handleDeleteChannel = (channelId: string) => {
+    setPlaylist((prev) => {
+      const target = prev.channels.find((c) => c.id === channelId);
+      const updatedChannels = prev.channels.filter((c) => c.id !== channelId);
+      const groups = Array.from(new Set(updatedChannels.map((c) => c.group || 'General'))).sort();
+      showToast(`Deleted "${target?.name || 'channel'}"`);
+      return {
+        ...prev,
+        channels: updatedChannels,
+        groups,
+        totalChannels: updatedChannels.length,
+        channelsWithLogo: updatedChannels.filter((c) => !!c.logo).length,
+      };
+    });
+  };
+
+  const handlePlaylistSaved = (slug: string, title: string) => {
+    setPlaylist((prev) => ({
+      ...prev,
+      slug,
+      title,
+    }));
+    showToast(`Saved and deployed to /playlist/${slug}`);
+  };
+
+  // Group counts map for CategoryTabs
+  const channelCountsByGroup = useMemo(() => {
+    const counts: Record<string, number> = {};
+    playlist.channels.forEach((c) => {
+      const g = c.group || 'General';
+      counts[g] = (counts[g] || 0) + 1;
+    });
+    return counts;
+  }, [playlist.channels]);
 
   // Filtered and Sorted Channels
   const filteredChannels = useMemo(() => {
@@ -271,16 +393,25 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Background soft ambient glows */}
+      {/* Cyber-futuristic subtle grid background pattern & glowing ambient orbs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-cyan-500/10 blur-[130px] rounded-full" />
-        <div className="absolute top-[40%] -right-40 w-[500px] h-[500px] bg-indigo-600/10 blur-[140px] rounded-full" />
-        <div className="absolute bottom-10 -left-40 w-[500px] h-[500px] bg-purple-600/10 blur-[150px] rounded-full" />
+        <div
+          className="absolute inset-0 opacity-[0.035]"
+          style={{
+            backgroundImage: `linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)`,
+            backgroundSize: '40px 40px',
+          }}
+        />
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[750px] h-[450px] bg-cyan-500/10 blur-[140px] rounded-full" />
+        <div className="absolute top-[35%] -right-40 w-[550px] h-[550px] bg-violet-600/10 blur-[150px] rounded-full" />
+        <div className="absolute bottom-10 -left-40 w-[550px] h-[550px] bg-indigo-600/10 blur-[160px] rounded-full" />
       </div>
 
       {/* Top Bar */}
       <Header
         onOpenExport={() => setIsExportModalOpen(true)}
+        onOpenXtream={() => setIsXtreamModalOpen(true)}
+        onOpenNextjs={() => setIsNextjsModalOpen(true)}
         channelCount={playlist.totalChannels}
       />
 
@@ -294,6 +425,19 @@ export default function App() {
           channelCount={playlist.totalChannels}
           onReset={handleReset}
         />
+
+        {/* Custom Link Naming (Slug Creator & Database Publisher) */}
+        {playlist.totalChannels > 0 && (
+          <section id="slug-creator">
+            <CustomSlugCreator
+              currentChannels={playlist.channels}
+              currentTitle={playlist.title}
+              currentSlug={playlist.slug}
+              onPlaylistSaved={handlePlaylistSaved}
+              onLoadSavedPlaylist={loadSavedPlaylist}
+            />
+          </section>
+        )}
 
         {/* Channels Workspace */}
         {playlist.totalChannels > 0 && (
@@ -312,6 +456,17 @@ export default function App() {
               onStatusFilterChange={(st) => setFilters({ ...filters, statusFilter: st })}
             />
 
+            {/* Interactive Category Group Tabs */}
+            {playlist.groups.length > 0 && (
+              <CategoryTabs
+                groups={playlist.groups}
+                selectedGroup={filters.selectedGroup}
+                onSelectGroup={(group) => setFilters({ ...filters, selectedGroup: group })}
+                channelCountsByGroup={channelCountsByGroup}
+                totalChannels={playlist.totalChannels}
+              />
+            )}
+
             {/* Filter & Search Toolbar */}
             <ChannelToolbar
               filters={filters}
@@ -323,7 +478,7 @@ export default function App() {
               onViewModeChange={setViewMode}
             />
 
-            {/* Channel List / Grid */}
+            {/* Channel List / Grid with Edit & Delete Actions */}
             <ChannelList
               channels={filteredChannels}
               viewMode={viewMode}
@@ -333,58 +488,50 @@ export default function App() {
               streamHealthMap={streamHealthMap}
               onCheckChannel={handleCheckChannel}
               checkingUrls={checkingUrls}
+              onEditChannel={handleEditChannel}
+              onDeleteChannel={handleDeleteChannel}
+              onAddNewChannel={handleAddNewChannel}
             />
           </section>
         )}
 
         {/* Specifications & Format Reference */}
         <section id="formats" className="pt-10 border-t border-slate-900 space-y-4">
-          <div className="text-left">
-            <h2 className="text-lg font-semibold text-white mb-1">
-              Supported Playlist Attributes & Specifications
-            </h2>
-            <p className="text-xs text-slate-400">
-              Standardized M3U parsing engine with lightweight HEAD/Range stream probing and metadata inspection.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-1">
+                Supported Playlist Attributes & IPTV Specifications
+              </h2>
+              <p className="text-xs text-slate-400">
+                Full compatibility with RFC 8216 HLS playlists, Xtream Codes API v2, and Kodi/VLC metadata.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsNextjsModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-mono transition-colors cursor-pointer self-start sm:self-auto"
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              <span>Next.js & Supabase Setup</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
-              <h3 className="text-xs font-semibold text-cyan-400 mb-1">Live / Offline Health Probing</h3>
+              <h3 className="text-xs font-semibold text-cyan-400 mb-1">Custom Slug Routing</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Sends lightweight HEAD and byte-range metadata queries to detect active video streams, HTTP status codes, server response latency, and MIME types without downloading full media files.
+                Publish playlists to permanent custom URLs (<code className="text-cyan-300 font-mono text-[11px]">/playlist/:slug</code>) stored in database, serving direct M3U manifests to IPTV players.
               </p>
             </div>
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
-              <h3 className="text-xs font-semibold text-indigo-400 mb-1">EXTINF Tag Parsing</h3>
+              <h3 className="text-xs font-semibold text-indigo-400 mb-1">Xtream Codes Conversion</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Extracts <code className="text-cyan-300 font-mono text-[11px]">tvg-id</code>, <code className="text-cyan-300 font-mono text-[11px]">tvg-logo</code>, <code className="text-cyan-300 font-mono text-[11px]">group-title</code>, and channel title suffixes automatically.
+                Converts channels into Xtream player credentials, category IDs, and M3U_PLUS streams compatible with IPTV Smarters and TiviMate.
               </p>
             </div>
             <div className="glass-panel rounded-xl p-4 border border-slate-800/80">
-              <h3 className="text-xs font-semibold text-purple-400 mb-1">Multi-Format Batch Export</h3>
+              <h3 className="text-xs font-semibold text-violet-400 mb-1">Live Stream Health Probing</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Export normalized M3U8 files, clean stream lists for aria2/curl downloaders, structured JSON, or spreadsheet CSV tables.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* FAQ Section */}
-        <section id="faq" className="pt-6 pb-12 border-t border-slate-900 space-y-4">
-          <h2 className="text-lg font-semibold text-white mb-1">Frequently Asked Questions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-400">
-            <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-1.5">
-              <h4 className="text-xs font-semibold text-slate-200">How does the stream health check work?</h4>
-              <p className="leading-relaxed">
-                It executes a non-intrusive HEAD request to check whether the stream server responds with an active HTTP 200/206 status, calculating latency and confirming video headers without consuming excess bandwidth.
-              </p>
-            </div>
-
-            <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl space-y-1.5">
-              <h4 className="text-xs font-semibold text-slate-200">Can I filter by Live streams only?</h4>
-              <p className="leading-relaxed">
-                Yes! Click the <strong>Live</strong> button in the Status filter or click the <strong>Live: N</strong> counter in the statistics bar to view only verified online channels.
+                Performs lightweight HEAD and Range requests to verify live streaming servers, status codes, latency, and video headers before deployment.
               </p>
             </div>
           </div>
@@ -398,9 +545,22 @@ export default function App() {
             <Layers className="w-4 h-4 text-cyan-500" />
             <span className="font-medium text-slate-400">M3U Stream Nexus</span>
             <span aria-hidden="true" className="text-slate-800">·</span>
-            <span>Client-side M3U to URL Converter</span>
+            <span>Custom URL Converter & IPTV Manager</span>
           </div>
-          <div>All processing runs 100% locally in your browser.</div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsNextjsModalOpen(true)}
+              className="text-violet-400 hover:text-violet-300 font-mono cursor-pointer"
+            >
+              Next.js Architecture
+            </button>
+            <button
+              onClick={() => setIsXtreamModalOpen(true)}
+              className="text-indigo-400 hover:text-indigo-300 font-mono cursor-pointer"
+            >
+              Xtream Codes
+            </button>
+          </div>
         </div>
       </footer>
 
@@ -411,6 +571,29 @@ export default function App() {
           onClose={() => setActiveChannelForPlayer(null)}
         />
       )}
+
+      {/* Channel Editor Modal */}
+      <ChannelEditorModal
+        isOpen={isEditorOpen}
+        channel={editingChannel}
+        existingGroups={playlist.groups}
+        onClose={() => setIsEditorOpen(false)}
+        onSave={handleSaveChannel}
+      />
+
+      {/* Xtream Codes Converter Modal */}
+      <XtreamCodesModal
+        isOpen={isXtreamModalOpen}
+        channels={filteredChannels}
+        slug={playlist.slug || 'custom-list'}
+        onClose={() => setIsXtreamModalOpen(false)}
+      />
+
+      {/* Next.js & Supabase Architecture Modal */}
+      <NextjsArchitectureModal
+        isOpen={isNextjsModalOpen}
+        onClose={() => setIsNextjsModalOpen(false)}
+      />
 
       {/* Export Modal */}
       {isExportModalOpen && (

@@ -1,0 +1,81 @@
+{
+  "featured-cinema": {
+    "slug": "featured-cinema",
+    "title": "Featured Cinema 4K",
+    "description": "Ultra HD animation, VFX sci-fi demo streams, and test manifests",
+    "updatedAt": "2026-10-25T21:00:00.000Z",
+    "channels": [
+      {
+        "id": "ch-1-bbb",
+        "name": "Big Buck Bunny (1080p HLS)",
+        "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/320px-Big_buck_bunny_poster_big.jpg",
+        "group": "Animation",
+        "tvgId": "bbb-hls",
+        "format": "HLS"
+      },
+      {
+        "id": "ch-2-sintel",
+        "name": "Sintel 4K Multi-Audio HLS",
+        "url": "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Sintel_poster.jpg/320px-Sintel_poster.jpg",
+        "group": "Animation",
+        "tvgId": "sintel-hls",
+        "format": "HLS"
+      },
+      {
+        "id": "ch-3-tears",
+        "name": "Tears of Steel (VFX Demo)",
+        "url": "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Tears_of_Steel_poster.jpg/320px-Tears_of_Steel_poster.jpg",
+        "group": "Sci-Fi & Action",
+        "tvgId": "tears-of-steel",
+        "format": "HLS"
+      },
+      {
+        "id": "ch-4-elephants",
+        "name": "Elephants Dream (Open Cinema)",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+        "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_poster.jpg/320px-Elephants_Dream_poster.jpg",
+        "group": "Animation",
+        "tvgId": "elephants-dream",
+        "format": "MP4"
+      }
+    ]
+  },
+  "my-sports-list": {
+    "slug": "my-sports-list",
+    "title": "Extreme Sports & Racing",
+    "description": "High-octane rally, motorsport, and action sports streams",
+    "updatedAt": "2026-10-25T21:05:00.000Z",
+    "channels": [
+      {
+        "id": "ch-sp-1",
+        "name": "Red Bull TV Live Broadcast",
+        "url": "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8",
+        "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/f/f5/Red_Bull_TV_logo.svg/320px-Red_Bull_TV_logo.svg.png",
+        "group": "Motorsports",
+        "tvgId": "redbull-tv",
+        "format": "HLS"
+      },
+      {
+        "id": "ch-sp-2",
+        "name": "Bullrun Extreme Rally HD",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
+        "logo": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/WeAreGoingOnBullrun.jpg",
+        "group": "Motorsports",
+        "tvgId": "bullrun",
+        "format": "MP4"
+      },
+      {
+        "id": "ch-sp-3",
+        "name": "Subaru All-Terrain Dirt Trials",
+        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
+        "logo": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/SubaruOutbackOnStreetAndDirt.jpg",
+        "group": "Motorsports",
+        "tvgId": "subaru-rally",
+        "format": "MP4"
+      }
+    ]
+  }
+}

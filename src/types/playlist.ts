@@ -15,12 +15,23 @@ export interface Channel {
 
 export interface PlaylistData {
   title: string;
+  slug?: string;
   filename?: string;
   channels: Channel[];
   groups: string[];
   totalChannels: number;
   channelsWithLogo: number;
   parsedAt: string;
+  updatedAt?: string;
+}
+
+export interface SavedPlaylistSummary {
+  slug: string;
+  title: string;
+  description: string;
+  updatedAt: string;
+  channelCount: number;
+  groups: string[];
 }
 
 export interface FilterOptions {
@@ -32,4 +43,12 @@ export interface FilterOptions {
 }
 
 export type ViewMode = 'list' | 'grid';
+
+export interface XtreamConfig {
+  serverUrl: string;
+  username: string;
+  password: string;
+  outputFormat: 'm3u_plus' | 'ts' | 'm3u8';
+}
+
 export type { StreamHealthResult };
